@@ -47,6 +47,18 @@ export const DbProvider = ({ children }) => {
   });
 
   const [firebaseConfig, setFirebaseConfig] = useState(() => {
+    // 1. Prioritize environment variables for easy PWA deployments
+    if (import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID && import.meta.env.VITE_FIREBASE_APP_ID) {
+      return {
+        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+        appId: import.meta.env.VITE_FIREBASE_APP_ID
+      };
+    }
+    // 2. Fallback to manually entered configurations in LocalStorage
     const local = localStorage.getItem('telesales_firebase_config');
     return local ? JSON.parse(local) : null;
   });
