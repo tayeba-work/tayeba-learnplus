@@ -85,7 +85,7 @@ export const DbProvider = ({ children }) => {
 
   // Bulk seeder for August 2026 data
   useEffect(() => {
-    const isSeeded = localStorage.getItem('seed_completed_august_2026_v2');
+    const isSeeded = localStorage.getItem('seed_completed_august_2026_v3');
     if (!isSeeded) {
       setOrders(prevOrders => {
         const merged = [...prevOrders];
@@ -99,7 +99,7 @@ export const DbProvider = ({ children }) => {
         console.log(`[Seeder] Seeded ${count} new orders into data model.`);
         return merged;
       });
-      localStorage.setItem('seed_completed_august_2026_v2', 'true');
+      localStorage.setItem('seed_completed_august_2026_v3', 'true');
     }
   }, []);
 
