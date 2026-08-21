@@ -1,11 +1,8 @@
 /* Bottom Navigation Bar Styles - Ultra Modern Floating Capsule */
 .bottom-nav-container {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  right: 16px;
+  margin: 8px 16px 16px 16px;
   height: 64px;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -13,7 +10,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   padding: 6px 10px;
-  z-index: 100;
+  z-index: 1000;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(139, 92, 246, 0.05);
 }
 

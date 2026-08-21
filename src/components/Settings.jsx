@@ -335,19 +335,19 @@ const Settings = () => {
           <div className="glass-card target-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div className="avatar-initials" style={{ width: '48px', height: '48px', fontSize: '20px' }}>
-                {firebaseUser ? firebaseUser.email.charAt(0).toUpperCase() : 'A'}
+                {firebaseUser ? firebaseUser.email.charAt(0).toUpperCase() : 'T'}
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'white', margin: 0 }}>
-                    {firebaseUser ? firebaseUser.email.split('@')[0] : 'Anonymous Agent'}
+                    {firebaseUser ? firebaseUser.email.split('@')[0] : 'Tayeba Samma'}
                   </h3>
                   <span className="feedback-chip active" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(139,92,246,0.15)', color: 'hsl(var(--primary-glow))', borderColor: 'rgba(139,92,246,0.2)' }}>
                     Telesales Pro
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {firebaseUser ? firebaseUser.email : 'Local Data Mode Active'}
+                  {firebaseUser ? firebaseUser.email : 'Tayeba Samma (Local Sandbox)'}
                 </span>
               </div>
             </div>

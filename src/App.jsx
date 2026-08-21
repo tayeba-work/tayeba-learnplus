@@ -115,7 +115,9 @@ function AppContent() {
                 {firebaseUser.email.charAt(0).toUpperCase()}
               </div>
             ) : (
-              <User size={14} />
+              <div className="avatar-initials" style={{ background: 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))', color: 'white', fontWeight: 800 }}>
+                T
+              </div>
             )}
             <span className={`header-status-dot ${isFirebaseConnected ? 'online' : 'offline'}`} />
           </button>
@@ -124,8 +126,8 @@ function AppContent() {
             <div className="profile-dropdown animate-fade-in" style={{ position: 'absolute', top: '38px', right: 0, zIndex: 999, width: '200px', padding: '12px', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(11, 15, 25, 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
                 {/* User Identity Info */}
                 <div style={{ paddingBottom: '6px', borderBottom: '1px dashed var(--border-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 800, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={firebaseUser ? firebaseUser.email : 'Local Agent'}>
-                    {firebaseUser ? firebaseUser.email : 'Offline Guest Agent'}
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={firebaseUser ? firebaseUser.email : 'Tayeba Samma'}>
+                    {firebaseUser ? firebaseUser.email : 'Tayeba Samma'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: isFirebaseConnected ? '#10b981' : '#94a3b8', boxShadow: isFirebaseConnected ? '0 0 4px #10b981' : 'none' }} />
@@ -187,7 +189,7 @@ function AppContent() {
       </header>
 
       {/* Main Screen Content */}
-      <div style={{ flexGrow: 1, overflowY: 'auto', paddingBottom: '96px' }}>
+      <div style={{ flexGrow: 1, overflowY: 'auto', paddingBottom: '12px' }}>
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'parser' && <MagicalParser onSaveSuccess={() => setActiveTab('orders')} />}
         {activeTab === 'orders' && <OrderList searchQuery={searchQuery} setSearchQuery={setSearchQuery} />}
