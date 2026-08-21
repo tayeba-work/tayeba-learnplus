@@ -85,23 +85,27 @@ export const DbProvider = ({ children }) => {
   }, [dailyTarget]);
 
   // Bulk seeder for August 2026 data
+  // SAFE: Only adds orders that don't already exist by ID or phone+date.
+  // NEVER overwrites status or any field of an existing order.
   useEffect(() => {
-    const isSeeded = localStorage.getItem('seed_completed_august_2026_v3');
-    if (!isSeeded) {
-      setOrders(prevOrders => {
-        const merged = [...prevOrders];
-        let count = 0;
-        seedOrders.forEach(seeded => {
-          if (!merged.some(o => o.phone === seeded.phone && o.date === seeded.date)) {
-            merged.push(seeded);
-            count++;
-          }
-        });
-        console.log(`[Seeder] Seeded ${count} new orders into data model.`);
-        return merged;
+    setOrders(prevOrders => {
+      const existingIds = new Set(prevOrders.map(o => o.id));
+      const existingPhoneDates = new Set(prevOrders.map(o => `${o.phone}__${o.date}`));
+      const newOrders = [];
+      
+      seedOrders.forEach(seeded => {
+        // Skip if already exists by ID or phone+date combination
+        const key = `${seeded.phone}__${seeded.date}`;
+        if (existingIds.has(seeded.id) || existingPhoneDates.has(key)) return;
+        newOrders.push(seeded);
       });
-      localStorage.setItem('seed_completed_august_2026_v3', 'true');
-    }
+
+      if (newOrders.length > 0) {
+        console.log(`[Seeder] Added ${newOrders.length} new orders (existing orders untouched).`);
+        return [...prevOrders, ...newOrders];
+      }
+      return prevOrders; // No change - all orders already present
+    });
   }, []);
 
   useEffect(() => {
