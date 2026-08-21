@@ -18,6 +18,35 @@ function AppContent() {
 
   const dropdownRef = useRef(null);
 
+  // Advanced Back/Forward History Navigation Engine (PWA Native feel)
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    const validTabs = ['dashboard', 'parser', 'orders', 'settings'];
+    if (validTabs.includes(hash)) {
+      setActiveTab(hash);
+    } else {
+      window.location.hash = 'dashboard';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash.replace('#', '') !== activeTab) {
+      window.location.hash = activeTab;
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      const validTabs = ['dashboard', 'parser', 'orders', 'settings'];
+      if (validTabs.includes(hash) && hash !== activeTab) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeTab]);
+
   // Catch PWA installation prompt
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
