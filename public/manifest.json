@@ -1,0 +1,18 @@
+{
+  "short_name": "LearnPlus",
+  "name": "LearnPlus Telesales Portal",
+  "description": "Super advanced educational telesales manager and text parsing portal.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#070913",
+  "theme_color": "#8b5cf6",
+  "display": "standalone",
+  "orientation": "portrait"
+}

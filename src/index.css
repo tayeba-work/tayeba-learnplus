@@ -1,0 +1,326 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Color Palette - Premium Space Dark Theme */
+  --primary: 258;             /* Violet */
+  --primary-glow: 258, 85%, 65%;
+  --secondary: 320;           /* Pink */
+  --secondary-glow: 320, 80%, 60%;
+  
+  --bg-dark-base: 222, 47%, 7%; /* Deep Navy Slate */
+  --bg-dark-panel: 222, 47%, 11%;
+  --bg-dark-card: 222, 47%, 14%;
+  
+  --text-white: #f3f4f6;
+  --text-gray-light: #d1d5db;
+  --text-gray-dark: #9ca3af;
+  --text-muted: #6b7280;
+  
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(139, 92, 246, 0.25);
+  
+  /* Status Colors (HSL) */
+  --status-pending-h: 38;      /* Amber */
+  --status-pending: hsl(38, 92%, 50%);
+  --status-pending-bg: hsla(38, 92%, 50%, 0.15);
+  
+  --status-confirmed-h: 217;  /* Blue */
+  --status-confirmed: hsl(217, 91%, 60%);
+  --status-confirmed-bg: hsla(217, 91%, 60%, 0.15);
+  
+  --status-shipped-h: 195;    /* Cyan */
+  --status-shipped: hsl(195, 85%, 50%);
+  --status-shipped-bg: hsla(195, 85%, 50%, 0.15);
+  
+  --status-delivered-h: 142;  /* Emerald */
+  --status-delivered: hsl(142, 70%, 45%);
+  --status-delivered-bg: hsla(142, 70%, 45%, 0.15);
+  
+  --status-cancelled-h: 350;  /* Coral Red */
+  --status-cancelled: hsl(350, 80%, 55%);
+  --status-cancelled-bg: hsla(350, 80%, 55%, 0.15);
+
+  --status-returned-h: 280;   /* Purple */
+  --status-returned: hsl(280, 80%, 60%);
+  --status-returned-bg: hsla(280, 80%, 60%, 0.15);
+
+  /* Font Families */
+  --font-sans: 'Outfit', 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+  
+  /* Layout constraints */
+  --app-max-width: 480px; /* Mobile App Viewport simulation on desktop */
+}
+
+/* Reset and Global Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #070913;
+  color: var(--text-white);
+  line-height: 1.5;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-x: hidden;
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.08) 0%, transparent 40%);
+  background-attachment: fixed;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+/* App Viewport Simulation Shell */
+.app-container {
+  width: 100%;
+  max-width: var(--app-max-width);
+  height: 100vh;
+  height: 100svh;
+  background-color: hsl(var(--bg-dark-base));
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border-left: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+  overflow: hidden; /* Prevent parent container scrolling */
+}
+
+@media (max-width: 480px) {
+  .app-container {
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+  }
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Glassmorphism & Card Utilities */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+}
+
+.glass-card {
+  background: rgba(23, 37, 84, 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-2px);
+}
+
+/* Glowing Typography */
+.text-glow {
+  text-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Interactive Elements (Buttons & Inputs) */
+.btn-primary {
+  background: linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)));
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-family: var(--font-sans);
+}
+
+.btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-white);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-family: var(--font-sans);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-glow);
+}
+
+.input-field {
+  width: 100%;
+  background: rgba(17, 24, 39, 0.6);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.25s ease;
+  font-family: var(--font-sans);
+}
+
+.input-field:focus {
+  border-color: hsl(var(--primary-glow));
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+  background: rgba(17, 24, 39, 0.85);
+}
+
+/* Badge System */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  gap: 4px;
+}
+
+.badge-pending { color: var(--status-pending); background: var(--status-pending-bg); }
+.badge-confirmed { color: var(--status-confirmed); background: var(--status-confirmed-bg); }
+.badge-shipped { color: var(--status-shipped); background: var(--status-shipped-bg); }
+.badge-delivered { color: var(--status-delivered); background: var(--status-delivered-bg); }
+.badge-cancelled { color: var(--status-cancelled); background: var(--status-cancelled-bg); }
+.badge-returned { color: var(--status-returned); background: var(--status-returned-bg); }
+
+/* Custom Animations */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.pulse-glow-border {
+  border-color: hsl(var(--primary-glow));
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+/* Layout Utilities */
+.app-header {
+  padding: 12px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.35);
+}
+
+.app-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-white);
+}
+
+/* Empty State / Notes Style */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state svg {
+  opacity: 0.4;
+}
