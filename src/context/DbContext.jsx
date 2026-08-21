@@ -121,7 +121,12 @@ export const DbProvider = ({ children }) => {
 
     try {
       const apps = getApps();
-      const app = apps.length === 0 ? initializeApp(firebaseConfig) : apps[0];
+      const finalConfig = {
+        ...firebaseConfig,
+        authDomain: firebaseConfig.authDomain || `${firebaseConfig.projectId}.firebaseapp.com`,
+        storageBucket: firebaseConfig.storageBucket || `${firebaseConfig.projectId}.appspot.com`
+      };
+      const app = apps.length === 0 ? initializeApp(finalConfig) : apps[0];
       const db = getFirestore(app);
       const auth = getAuth(app);
 
