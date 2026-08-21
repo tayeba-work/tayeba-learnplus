@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useDb } from '../context/DbContext';
 import OrderCard from './OrderCard';
+import { playSuccessSound } from '../utils/parser';
 import { 
   Search, 
   Filter, 
@@ -15,11 +16,12 @@ import {
 } from 'lucide-react';
 
 const OrderList = ({ searchQuery, setSearchQuery }) => {
-  const { orders } = useDb();
+  const { orders, bulkUpdateOrders } = useDb();
   
   const [dateFilter, setDateFilter] = useState('all'); // today, yesterday, last7, thisMonth, all, custom
   const [statusFilter, setStatusFilter] = useState('all'); // all, pending, confirmed, shipped, delivered, cancelled, returned
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   
   // Custom Date range
   const [customStartDate, setCustomStartDate] = useState('');
@@ -38,6 +40,39 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
     if (!selectedOrder) return null;
     return orders.find(o => o.id === selectedOrder.id) || null;
   }, [orders, selectedOrder]);
+
+  const toggleSelectOrder = (id) => {
+    setSelectedOrderIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = (filteredList) => {
+    const filteredIds = filteredList.map(o => o.id);
+    const allSelected = filteredIds.every(id => selectedOrderIds.includes(id));
+    if (allSelected) {
+      setSelectedOrderIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    } else {
+      setSelectedOrderIds(prev => {
+        const newSelection = [...prev];
+        filteredIds.forEach(id => {
+          if (!newSelection.includes(id)) newSelection.push(id);
+        });
+        return newSelection;
+      });
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus) => {
+    if (selectedOrderIds.length === 0) return;
+    try {
+      await bulkUpdateOrders(selectedOrderIds, { status: newStatus });
+      setSelectedOrderIds([]);
+      playSuccessSound();
+    } catch (e) {
+      console.error("Bulk update failed:", e);
+    }
+  };
 
   // If the selected order is deleted, auto-close the popup
   useEffect(() => {
@@ -283,6 +318,42 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      {filteredOrders.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 4px 10px 4px', fontSize: '11.5px', color: 'var(--text-gray-dark)', fontWeight: 700 }}>
+          <div 
+            onClick={() => handleSelectAll(filteredOrders)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', userSelect: 'none' }}
+          >
+            <div style={{
+              width: '15px',
+              height: '15px',
+              borderRadius: '4px',
+              border: `1.5px solid ${filteredOrders.every(o => selectedOrderIds.includes(o.id)) ? 'hsl(var(--primary-glow))' : 'rgba(255,255,255,0.2)'}`,
+              background: filteredOrders.every(o => selectedOrderIds.includes(o.id)) ? 'hsl(var(--primary-glow))' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s ease'
+            }}>
+              {filteredOrders.every(o => selectedOrderIds.includes(o.id)) && (
+                <span style={{ fontSize: '9px', color: 'white', fontWeight: 'bold' }}>✓</span>
+              )}
+            </div>
+            <span>Select All Filtered ({filteredOrders.length})</span>
+          </div>
+          {selectedOrderIds.length > 0 && (
+            <button 
+              type="button" 
+              onClick={() => setSelectedOrderIds([])}
+              style={{ background: 'transparent', border: 'none', color: 'var(--status-cancelled)', cursor: 'pointer', padding: 0, fontSize: '11px', fontWeight: 800 }}
+            >
+              Clear Selection ({selectedOrderIds.length})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Orders List rendered as single compact rows */}
       {groupedOrders.length === 0 ? (
         <div className="glass-card" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -306,6 +377,28 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
                     className="compact-order-row"
                     onClick={() => setSelectedOrder(order)}
                   >
+                    {/* Inline Checkbox Selector */}
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); toggleSelectOrder(order.id); }}
+                      style={{ paddingRight: '8px', display: 'flex', alignItems: 'center', cursor: 'pointer', zIndex: 10 }}
+                    >
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '4px',
+                        border: `1.5px solid ${selectedOrderIds.includes(order.id) ? 'hsl(var(--primary-glow))' : 'rgba(255,255,255,0.2)'}`,
+                        background: selectedOrderIds.includes(order.id) ? 'hsl(var(--primary-glow))' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.15s ease'
+                      }}>
+                        {selectedOrderIds.includes(order.id) && (
+                          <span style={{ fontSize: '10px', color: 'white', fontWeight: 'bold' }}>✓</span>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="compact-left">
                       <span 
                         className="status-dot" 
@@ -349,6 +442,76 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
               </button>
             </div>
             <OrderCard order={activeOrder} />
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedOrderIds.length > 0 && (
+        <div className="glass-panel animate-fade-in" style={{
+          position: 'absolute',
+          bottom: '84px',
+          left: '16px',
+          right: '16px',
+          padding: '12px 14px',
+          borderRadius: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(15, 23, 42, 0.95)',
+          boxShadow: '0 -10px 25px rgba(0, 0, 0, 0.5), 0 5px 15px rgba(0,0,0,0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          zIndex: 1050
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: 'white' }}>
+              📝 Selected {selectedOrderIds.length} {selectedOrderIds.length === 1 ? 'Order' : 'Orders'}
+            </span>
+            <button 
+              type="button" 
+              onClick={() => setSelectedOrderIds([])}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}
+            >
+              Cancel
+            </button>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              Change Status To:
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+              {[
+                { label: 'Pending', value: 'pending', color: 'var(--status-pending)' },
+                { label: 'Confirm', value: 'confirmed', color: 'var(--status-confirmed)' },
+                { label: 'Ship', value: 'shipped', color: 'var(--status-shipped)' },
+                { label: 'Deliver', value: 'delivered', color: 'var(--status-delivered)' },
+                { label: 'Return', value: 'returned', color: 'var(--status-returned)' },
+                { label: 'Cancel', value: 'cancelled', color: 'var(--status-cancelled)' }
+              ].map(statusItem => (
+                <button
+                  key={statusItem.value}
+                  type="button"
+                  onClick={() => handleBulkStatusUpdate(statusItem.value)}
+                  style={{
+                    padding: '6px 4px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    color: statusItem.color,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    textAlign: 'center'
+                  }}
+                  onMouseOver={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.08)'}
+                  onMouseOut={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.03)'}
+                >
+                  {statusItem.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -6,7 +6,8 @@ import {
   doc, 
   setDoc, 
   deleteDoc, 
-  onSnapshot 
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -328,6 +329,48 @@ export const DbProvider = ({ children }) => {
     }
   };
 
+  const bulkUpdateOrders = async (ids, updatedFields) => {
+    if (!ids || ids.length === 0) return;
+    const updatedTimestamp = Date.now();
+
+    setOrders(prev => prev.map(order => {
+      if (ids.includes(order.id)) {
+        return {
+          ...order,
+          ...updatedFields,
+          price: updatedFields.price !== undefined ? parseInt(updatedFields.price, 10) || 0 : order.price,
+          lastUpdated: updatedTimestamp
+        };
+      }
+      return order;
+    }));
+
+    if (isFirebaseConnected && firebaseConfig && firebaseUser) {
+      try {
+        const apps = getApps();
+        const db = getFirestore(apps[0]);
+        const batch = writeBatch(db);
+        
+        orders.forEach(order => {
+          if (ids.includes(order.id)) {
+            const finalOrder = {
+              ...order,
+              ...updatedFields,
+              price: updatedFields.price !== undefined ? parseInt(updatedFields.price, 10) || 0 : order.price,
+              lastUpdated: updatedTimestamp
+            };
+            const docRef = doc(db, 'users', firebaseUser.uid, 'orders', order.id);
+            batch.set(docRef, finalOrder);
+          }
+        });
+        
+        await batch.commit();
+      } catch (e) {
+        console.warn("Offline bulk sync cached:", e);
+      }
+    }
+  };
+
   const deleteOrder = async (id) => {
     setOrders(prev => prev.filter(order => order.id !== id));
 
@@ -384,6 +427,7 @@ export const DbProvider = ({ children }) => {
       logout,
       addOrder,
       updateOrder,
+      bulkUpdateOrders,
       deleteOrder,
       saveProducts,
       saveDailyTarget,
