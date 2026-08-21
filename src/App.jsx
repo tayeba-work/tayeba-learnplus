@@ -12,9 +12,35 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
   const { firebaseUser, isFirebaseConnected, firebaseConfig, logout } = useDb();
 
   const dropdownRef = useRef(null);
+
+  // Catch PWA installation prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to install: ${outcome}`);
+    setDeferredPrompt(null);
+    setShowInstallBtn(false);
+  };
 
   // Close profile dropdown when clicking outside of it
   useEffect(() => {
@@ -111,6 +137,16 @@ function AppContent() {
 
                 {/* Dropdown Options */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {showInstallBtn && (
+                    <button 
+                      type="button" 
+                      onClick={handleInstallClick}
+                      className="dropdown-item-btn"
+                      style={{ color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.15)', marginBottom: '4px' }}
+                    >
+                      📲 Install Phone App
+                    </button>
+                  )}
                   <button 
                     type="button" 
                     onClick={() => { setActiveTab('settings'); setShowProfileDropdown(false); }}
