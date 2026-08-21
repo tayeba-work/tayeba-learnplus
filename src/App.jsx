@@ -5,14 +5,12 @@ import MagicalParser from './components/MagicalParser';
 import OrderList from './components/OrderList';
 import Settings from './components/Settings';
 import BottomNav from './components/BottomNav';
-import LoginPortal from './components/LoginPortal';
 import { Sparkles, PhoneCall, Search, User, X } from 'lucide-react';
 import './App.css';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
-  const [bypassAuth, setBypassAuth] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const { firebaseUser, isFirebaseConnected, firebaseConfig, logout } = useDb();
 
@@ -45,11 +43,6 @@ function AppContent() {
       setActiveTab('orders');
     }
   };
-
-  // Enforce Login Gate if database is configured but user is not logged in yet
-  if (firebaseConfig && !firebaseUser && !bypassAuth) {
-    return <LoginPortal onBypass={() => setBypassAuth(true)} />;
-  }
 
   return (
     <div className="app-container animate-fade-in">
