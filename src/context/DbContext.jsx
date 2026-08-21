@@ -18,6 +18,7 @@ import {
   signInWithPopup,
   sendPasswordResetEmail
 } from 'firebase/auth';
+import seedOrders from './seed_orders.json';
 
 const DbContext = createContext();
 
@@ -81,6 +82,26 @@ export const DbProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('telesales_daily_target', dailyTarget.toString());
   }, [dailyTarget]);
+
+  // Bulk seeder for August 2026 data
+  useEffect(() => {
+    const isSeeded = localStorage.getItem('seed_completed_august_2026_v2');
+    if (!isSeeded) {
+      setOrders(prevOrders => {
+        const merged = [...prevOrders];
+        let count = 0;
+        seedOrders.forEach(seeded => {
+          if (!merged.some(o => o.phone === seeded.phone && o.date === seeded.date)) {
+            merged.push(seeded);
+            count++;
+          }
+        });
+        console.log(`[Seeder] Seeded ${count} new orders into data model.`);
+        return merged;
+      });
+      localStorage.setItem('seed_completed_august_2026_v2', 'true');
+    }
+  }, []);
 
   useEffect(() => {
     if (firebaseConfig) {
