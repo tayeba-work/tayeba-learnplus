@@ -65,18 +65,18 @@ const Dashboard = () => {
     return dateFilteredOrders.filter(o => o.status === statusFilter);
   }, [dateFilteredOrders, statusFilter]);
 
-  // 4. METRICS CALCULATIONS FOR THE 4 KPI CARDS
-  const totalOrders = filteredOrders.length;
+  // 4. METRICS CALCULATIONS FOR THE 4 KPI CARDS (Calculated based on date range for complete visibility)
+  const totalOrders = dateFilteredOrders.length;
   
   const cardCounts = useMemo(() => {
     const totals = { pending: 0, confirmed: 0, shipped: 0, delivered: 0, returned: 0, cancelled: 0 };
-    filteredOrders.forEach(o => {
+    dateFilteredOrders.forEach(o => {
       if (totals[o.status] !== undefined) {
         totals[o.status]++;
       }
     });
     return totals;
-  }, [filteredOrders]);
+  }, [dateFilteredOrders]);
 
   const successfulOrders = cardCounts.delivered + cardCounts.shipped + cardCounts.confirmed;
   const unsuccessfulOrders = cardCounts.cancelled + cardCounts.returned;

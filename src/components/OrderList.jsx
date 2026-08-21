@@ -113,8 +113,8 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
     return totals;
   }, [orders, dateFilter, customStartDate, customEndDate, todayStr, yesterdayStr]);
 
-  // 2. MAIN FILTER LOGIC
-  const filteredOrders = useMemo(() => {
+  // 2. MAIN FILTER LOGIC - Stage 1: Date & Search Filter (Used for accurate status counts)
+  const dateAndSearchFilteredOrders = useMemo(() => {
     return orders.filter(order => {
       // Search Query filter (matches name, phone, address, product, notes)
       const q = searchQuery.toLowerCase().trim();
@@ -126,9 +126,6 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
         (order.notes && order.notes.toLowerCase().includes(q));
 
       if (!matchSearch) return false;
-
-      // Status Filter
-      if (statusFilter !== 'all' && order.status !== statusFilter) return false;
 
       // Date Filter
       if (dateFilter === 'today') {
@@ -158,7 +155,13 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
 
       return true; // dateFilter === 'all'
     });
-  }, [orders, searchQuery, dateFilter, statusFilter, customStartDate, customEndDate, todayStr, yesterdayStr]);
+  }, [orders, searchQuery, dateFilter, customStartDate, customEndDate, todayStr, yesterdayStr]);
+
+  // Stage 2: Final filter applying Status (For view rendering)
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === 'all') return dateAndSearchFilteredOrders;
+    return dateAndSearchFilteredOrders.filter(o => o.status === statusFilter);
+  }, [dateAndSearchFilteredOrders, statusFilter]);
 
   // Group filtered orders by date for readability
   const groupedOrders = useMemo(() => {
@@ -295,25 +298,25 @@ const OrderList = ({ searchQuery, setSearchQuery }) => {
       <div className="list-kpis-container">
         <div className="glass-card mini-kpi-card" style={{ borderLeft: '3px solid hsl(var(--primary-glow))' }}>
           <span className="mini-kpi-label">Total Orders</span>
-          <span className="mini-kpi-val">{filteredOrders.length}</span>
+          <span className="mini-kpi-val">{dateAndSearchFilteredOrders.length}</span>
         </div>
         
         <div className="glass-card mini-kpi-card" style={{ borderLeft: '3px solid var(--status-pending)' }}>
           <span className="mini-kpi-label" style={{ color: 'var(--status-pending)' }}>Pending</span>
-          <span className="mini-kpi-val pending">{filteredOrders.filter(o => o.status === 'pending').length}</span>
+          <span className="mini-kpi-val pending">{dateAndSearchFilteredOrders.filter(o => o.status === 'pending').length}</span>
         </div>
         
         <div className="glass-card mini-kpi-card" style={{ borderLeft: '3px solid var(--status-confirmed)' }}>
           <span className="mini-kpi-label" style={{ color: 'var(--status-confirmed)' }}>Successful</span>
           <span className="mini-kpi-val" style={{ color: 'var(--status-confirmed)' }}>
-            {filteredOrders.filter(o => ['confirmed', 'shipped', 'delivered'].includes(o.status)).length}
+            {dateAndSearchFilteredOrders.filter(o => ['confirmed', 'shipped', 'delivered'].includes(o.status)).length}
           </span>
         </div>
         
         <div className="glass-card mini-kpi-card" style={{ borderLeft: '3px solid var(--status-cancelled)' }}>
           <span className="mini-kpi-label" style={{ color: 'var(--status-cancelled)' }}>Cancelled</span>
           <span className="mini-kpi-val" style={{ color: 'var(--status-cancelled)' }}>
-            {filteredOrders.filter(o => ['cancelled', 'returned'].includes(o.status)).length}
+            {dateAndSearchFilteredOrders.filter(o => ['cancelled', 'returned'].includes(o.status)).length}
           </span>
         </div>
       </div>
