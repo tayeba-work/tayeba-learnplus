@@ -30,15 +30,22 @@ function AppContent() {
     if (validTabs.includes(hash)) {
       setActiveTab(hash);
     } else {
-      window.location.hash = 'dashboard';
+      // Don't overwrite the hash if it looks like a Firebase Auth redirect handler state
+      if (!hash.startsWith('__') && !hash.includes('state=')) {
+        window.location.hash = 'dashboard';
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (window.location.hash.replace('#', '') !== activeTab) {
+    // If the login portal is active, do not overwrite the hash to prevent breaking OAuth redirects
+    if (showLoginPortal) return;
+
+    const currentHash = window.location.hash.replace('#', '');
+    if (currentHash !== activeTab && !currentHash.startsWith('__') && !currentHash.includes('state=')) {
       window.location.hash = activeTab;
     }
-  }, [activeTab]);
+  }, [activeTab, showLoginPortal]);
 
   useEffect(() => {
     const handleHashChange = () => {

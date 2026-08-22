@@ -18,7 +18,8 @@ const LoginPortal = ({ onBypass }) => {
     loginWithGoogle,
     resetPassword,
     firebaseConfig,
-    isSyncing
+    isSyncing,
+    syncError
   } = useDb();
 
   const [authMode, setAuthMode] = useState('login'); // 'login', 'register', 'reset'
@@ -108,6 +109,13 @@ const LoginPortal = ({ onBypass }) => {
           <div className="glass-card auth-alert error animate-fade-in" style={{ borderLeft: '4px solid var(--status-cancelled)', background: 'rgba(239, 68, 68, 0.08)', padding: '10px 12px', marginBottom: '16px', borderRadius: '10px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
             <AlertCircle size={16} style={{ color: 'var(--status-cancelled)', flexShrink: 0, marginTop: '2px' }} />
             <span style={{ fontSize: '11.5px', color: 'white', lineHeight: '1.4' }}>{errorMsg}</span>
+          </div>
+        )}
+
+        {syncError && (
+          <div className="glass-card auth-alert error animate-fade-in" style={{ borderLeft: '4px solid var(--status-cancelled)', background: 'rgba(239, 68, 68, 0.08)', padding: '10px 12px', marginBottom: '16px', borderRadius: '10px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <AlertCircle size={16} style={{ color: 'var(--status-cancelled)', flexShrink: 0, marginTop: '2px' }} />
+            <span style={{ fontSize: '11.5px', color: 'white', lineHeight: '1.4' }}>{syncError}</span>
           </div>
         )}
 
