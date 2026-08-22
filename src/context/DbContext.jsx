@@ -27,9 +27,6 @@ import seedOrders from './seed_orders.json';
 const DbContext = createContext();
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 
-// Named app key — lets us safely delete & recreate when config changes
-const FIREBASE_APP_NAME = 'telesales-app';
-
 export const useDb = () => useContext(DbContext);
 
 export const DbProvider = ({ children }) => {
@@ -142,6 +139,7 @@ export const DbProvider = ({ children }) => {
       setIsFirebaseConnected(false);
       setFirebaseUser(null);
       setIsSyncing(false);
+      setAuthReady(true);
       return;
     }
 
@@ -152,9 +150,10 @@ export const DbProvider = ({ children }) => {
 
     const run = async () => {
       try {
-        // FIX 1: Use a named app so we can safely delete & recreate on config change
-        const existing = getApps().find(a => a.name === FIREBASE_APP_NAME);
-        if (existing) await deleteApp(existing);
+        // CRITICAL FIX: Use standard '[DEFAULT]' app because Firebase Auth redirects (getRedirectResult)
+        // are only supported on the default Firebase app instance.
+        const defaultApp = getApps().find(a => a.name === '[DEFAULT]');
+        if (defaultApp) await deleteApp(defaultApp);
 
         const cfg = {
           ...firebaseConfig,
@@ -162,7 +161,7 @@ export const DbProvider = ({ children }) => {
           storageBucket: firebaseConfig.storageBucket || `${firebaseConfig.projectId}.appspot.com`
         };
 
-        const app  = initializeApp(cfg, FIREBASE_APP_NAME);
+        const app  = initializeApp(cfg); // Init default app
         const db   = getFirestore(app);
         const auth = getAuth(app);
 
@@ -176,7 +175,6 @@ export const DbProvider = ({ children }) => {
           }
         } catch (redirectErr) {
           console.error('[Firebase] Redirect error:', redirectErr);
-          // Standard Firebase error messages for storage blockages
           if (redirectErr.code === 'auth/web-storage-unsupported') {
             setSyncError('Browser blocks storage. Please use Email/Password sign-in or disable tracking prevention.');
           } else {
@@ -193,7 +191,7 @@ export const DbProvider = ({ children }) => {
 
             const colRef = collection(db, 'users', user.uid, 'orders');
 
-            // FIX 3: Upload local orders to cloud if Firestore is empty
+            // FIX: Upload local orders to cloud if Firestore is empty
             try {
               const snap = await getDocs(colRef);
               if (snap.empty && ordersRef.current.length > 0) {
@@ -208,7 +206,7 @@ export const DbProvider = ({ children }) => {
 
             if (unsubSnapshot) unsubSnapshot();
 
-            // FIX 2: Collect orders to push OUTSIDE setOrders callback
+            // Collect orders to push OUTSIDE setOrders callback
             unsubSnapshot = onSnapshot(colRef, (snap) => {
               const toUpload = [];
 
@@ -281,17 +279,18 @@ export const DbProvider = ({ children }) => {
   }, [firebaseConfig]);
 
   // ─── 6. AUTH ──────────────────────────────────────────────────────────────
-  const getNamedApp = () => {
-    const app = getApps().find(a => a.name === FIREBASE_APP_NAME);
+  const getDefaultApp = () => {
+    const app = getApps().find(a => a.name === '[DEFAULT]');
     if (!app) throw new Error('Firebase not initialized. Enter credentials first.');
     return app;
   };
 
-  const loginWithEmail    = (email, pw) => signInWithEmailAndPassword(getAuth(getNamedApp()), email, pw);
-  const registerWithEmail = (email, pw) => createUserWithEmailAndPassword(getAuth(getNamedApp()), email, pw);
-  const logout            = ()          => signOut(getAuth(getNamedApp()));
+  const loginWithEmail    = (email, pw) => signInWithEmailAndPassword(getAuth(getDefaultApp()), email, pw);
+  const registerWithEmail = (email, pw) => createUserWithEmailAndPassword(getAuth(getDefaultApp()), email, pw);
+  const logout            = ()          => signOut(getAuth(getDefaultApp()));
+  
   const loginWithGoogle   = async () => {
-    const auth = getAuth(getNamedApp());
+    const auth = getAuth(getDefaultApp());
     const provider = new GoogleAuthProvider();
     // Use redirect on mobile (PWA/phone), popup on desktop
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -301,11 +300,12 @@ export const DbProvider = ({ children }) => {
       await signInWithPopup(auth, provider);
     }
   };
-  const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getNamedApp()), email);
+  
+  const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getDefaultApp()), email);
 
   // ─── 7. DB OPERATIONS ─────────────────────────────────────────────────────
   const colRef = () => {
-    const app = getApps().find(a => a.name === FIREBASE_APP_NAME);
+    const app = getApps().find(a => a.name === '[DEFAULT]');
     if (!app || !firebaseUser) return null;
     return collection(getFirestore(app), 'users', firebaseUser.uid, 'orders');
   };
@@ -336,7 +336,6 @@ export const DbProvider = ({ children }) => {
     if (ref && updated) setDoc(doc(ref, id), updated).catch(console.warn);
   };
 
-  // FIX 4: Use ordersRef.current to avoid stale closure
   const bulkUpdateOrders = async (ids, fields) => {
     if (!ids?.length) return;
     const ts = Date.now();
@@ -347,7 +346,7 @@ export const DbProvider = ({ children }) => {
     ));
     const ref = colRef();
     if (!ref) return;
-    const batch = writeBatch(getFirestore(getApps().find(a => a.name === FIREBASE_APP_NAME)));
+    const batch = writeBatch(getFirestore(getDefaultApp()));
     ordersRef.current.forEach(o => {
       if (!ids.includes(o.id)) return;
       const updated = { ...o, ...fields, price: fields.price !== undefined ? parseInt(fields.price, 10) || 0 : o.price, lastUpdated: ts };
