@@ -138,14 +138,23 @@ const Settings = () => {
 
   const handleExportBackup = () => {
     try {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(orders, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `learnplus_telesales_backup_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.removeChild(downloadAnchor);
-      triggerNotification('📥 Backup downloaded successfully!');
+      const backup = {
+        exportedAt: new Date().toISOString(),
+        exportedAtLocal: new Date().toLocaleString('en-GB'),
+        appVersion: 'LearnPlus Telesales v1',
+        totalOrders: orders.length,
+        orders: orders
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `learnplus_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      triggerNotification(`✅ Backup downloaded! ${orders.length} orders saved with all statuses.`);
     } catch (e) {
       triggerNotification('❌ Export failed: ' + e.message);
     }
@@ -154,35 +163,47 @@ const Settings = () => {
   const handleImportBackup = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = ''; // reset input so same file can be re-imported
     
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target.result);
-        if (!Array.isArray(parsed)) {
-          triggerNotification('⚠️ Invalid file: Backup must be a list of orders.');
+        let parsed = JSON.parse(event.target.result);
+        
+        // Support both raw array and our wrapped backup format
+        const orderList = Array.isArray(parsed) ? parsed : (parsed.orders || []);
+        
+        if (!Array.isArray(orderList) || orderList.length === 0) {
+          triggerNotification('⚠️ Invalid file: No orders found in backup.');
           return;
         }
         
-        const isValid = parsed.every(o => o.name && o.phone && o.date);
+        const isValid = orderList.every(o => o.name && o.phone && o.date);
         if (!isValid) {
           triggerNotification('⚠️ Invalid file structure: missing required fields.');
           return;
         }
         
-        const merged = [...orders];
-        let importedCount = 0;
-        parsed.forEach(importedOrder => {
-          if (!merged.some(o => o.id === importedOrder.id)) {
-            merged.push(importedOrder);
-            importedCount++;
+        // MERGE: restore existing orders with backed-up statuses, add new ones
+        const existingMap = new Map(orders.map(o => [o.id, o]));
+        let restoredCount = 0;
+        let addedCount = 0;
+        
+        orderList.forEach(backupOrder => {
+          if (existingMap.has(backupOrder.id)) {
+            // Update status from backup (restore the saved status)
+            existingMap.set(backupOrder.id, { ...existingMap.get(backupOrder.id), status: backupOrder.status, notes: backupOrder.notes });
+            restoredCount++;
+          } else {
+            existingMap.set(backupOrder.id, backupOrder);
+            addedCount++;
           }
         });
         
-        importOrders(merged);
-        triggerNotification(`✅ Successfully imported ${importedCount} orders!`);
+        importOrders(Array.from(existingMap.values()));
+        triggerNotification(`✅ Restored! ${restoredCount} statuses updated, ${addedCount} new orders added.`);
       } catch (err) {
-        triggerNotification('❌ Failed to parse JSON: ' + err.message);
+        triggerNotification('❌ Failed to read backup: ' + err.message);
       }
     };
     reader.readAsText(file);
@@ -517,37 +538,59 @@ const Settings = () => {
           </div>
 
           {/* E. JSON Backup Operations */}
-          <div className="glass-card settings-section">
+          <div className="glass-card settings-section" style={{ border: '1px solid rgba(251, 191, 36, 0.2)', background: 'linear-gradient(135deg, rgba(251,191,36,0.04), rgba(11,15,25,0.8))' }}>
             <h3 className="stat-title" style={{ color: 'white' }}>
-              <Database size={16} /> Database Backup Operations
+              <Database size={16} style={{ color: '#fbbf24' }} /> 💾 Data Backup & Restore
             </h3>
-            <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
-              Save your database as a local file or import an existing backup to avoid data loss.
-            </p>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button 
-                type="button" 
-                onClick={handleExportBackup} 
-                className="btn-secondary" 
-                style={{ flex: 1, padding: '8px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            {/* Warning banner */}
+            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
+              <p style={{ fontSize: '11px', color: '#fbbf24', margin: 0, lineHeight: 1.5, fontWeight: 600 }}>
+                Firebase setup করার আগে অবশ্যই একটা Backup নিন। নতুন Google account-এ login করলে local data দেখা যাবে না।
+              </p>
+            </div>
+
+            {/* Current data summary */}
+            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Current Database</div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', marginTop: '2px' }}>{orders.length} Orders</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '10px', color: 'var(--status-confirmed)', fontWeight: 700 }}>✅ {orders.filter(o => ['confirmed','shipped','delivered'].includes(o.status)).length} Successful</div>
+                <div style={{ fontSize: '10px', color: 'var(--status-pending)', fontWeight: 700, marginTop: '2px' }}>⏳ {orders.filter(o => o.status === 'pending').length} Pending</div>
+                <div style={{ fontSize: '10px', color: 'var(--status-cancelled)', fontWeight: 700, marginTop: '2px' }}>❌ {orders.filter(o => ['cancelled','returned'].includes(o.status)).length} Cancelled</div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleExportBackup}
+                className="btn-primary"
+                style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
-                <Download size={14} /> Export Backup
+                <Download size={15} /> Download Full Backup ({orders.length} orders + statuses)
               </button>
-              
-              <label 
-                className="btn-secondary" 
-                style={{ flex: 1, padding: '8px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', margin: 0 }}
+
+              <label
+                className="btn-secondary"
+                style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: 0, boxSizing: 'border-box' }}
               >
-                <Upload size={14} /> Import Backup
-                <input 
-                  type="file" 
-                  accept=".json" 
-                  onChange={handleImportBackup} 
-                  style={{ display: 'none' }} 
+                <Upload size={15} /> Restore from Backup File
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportBackup}
+                  style={{ display: 'none' }}
                 />
               </label>
             </div>
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+              Restore করলে আপনার সব status ফিরে আসবে। নতুন orders add হবে, পুরোনো কিছু মুছবে না।
+            </p>
           </div>
         </div>
       )}
