@@ -5,7 +5,8 @@ import MagicalParser from './components/MagicalParser';
 import OrderList from './components/OrderList';
 import Settings from './components/Settings';
 import BottomNav from './components/BottomNav';
-import { Sparkles, PhoneCall, Search, User, X } from 'lucide-react';
+import LoginPortal from './components/LoginPortal';
+import { Sparkles, PhoneCall, Search, X } from 'lucide-react';
 import './App.css';
 
 function AppContent() {
@@ -14,7 +15,11 @@ function AppContent() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
-  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout } = useDb();
+  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout, isSyncing } = useDb();
+  const [bypassLogin, setBypassLogin] = useState(false);
+
+  // Show login portal when Firebase is configured but user not yet signed in
+  const showLoginPortal = firebaseConfig && !firebaseUser && !bypassLogin;
 
   const dropdownRef = useRef(null);
 
@@ -98,6 +103,11 @@ function AppContent() {
       setActiveTab('orders');
     }
   };
+
+  // Login Portal gate
+  if (showLoginPortal) {
+    return <LoginPortal onBypass={() => setBypassLogin(true)} />;
+  }
 
   return (
     <div className="app-container animate-fade-in">

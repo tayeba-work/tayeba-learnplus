@@ -1,19 +1,20 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { initializeApp, getApps } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { initializeApp, getApps, getApp, deleteApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  getDocs
 } from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
@@ -22,25 +23,29 @@ import {
 import seedOrders from './seed_orders.json';
 
 const DbContext = createContext();
-
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 
 export const useDb = () => useContext(DbContext);
 
 export const DbProvider = ({ children }) => {
-  // 1. STATE INITIALIZATION FROM LOCALSTORAGE
+
+  // ─── 1. STATE INITIALIZATION FROM LOCALSTORAGE ────────────────────────────
   const [orders, setOrders] = useState(() => {
-    const local = localStorage.getItem('telesales_orders');
-    return local ? JSON.parse(local) : [];
+    try {
+      const local = localStorage.getItem('telesales_orders');
+      return local ? JSON.parse(local) : [];
+    } catch { return []; }
   });
 
   const [products, setProducts] = useState(() => {
-    const local = localStorage.getItem('telesales_products');
-    return local ? JSON.parse(local) : [
-      { id: '1', name: 'LearnPlus Premium Course', price: 1550 },
-      { id: '2', name: 'LearnPlus Interactive Book', price: 1200 },
-      { id: '3', name: 'LearnPlus Software Suite', price: 4500 }
-    ];
+    try {
+      const local = localStorage.getItem('telesales_products');
+      return local ? JSON.parse(local) : [
+        { id: '1', name: 'LearnPlus Premium Course', price: 1550 },
+        { id: '2', name: 'LearnPlus Interactive Book', price: 1200 },
+        { id: '3', name: 'LearnPlus Software Suite', price: 4500 }
+      ];
+    } catch { return []; }
   });
 
   const [dailyTarget, setDailyTarget] = useState(() => {
@@ -49,8 +54,11 @@ export const DbProvider = ({ children }) => {
   });
 
   const [firebaseConfig, setFirebaseConfig] = useState(() => {
-    // 1. Prioritize environment variables for easy PWA deployments
-    if (import.meta.env.VITE_FIREBASE_API_KEY && import.meta.env.VITE_FIREBASE_PROJECT_ID && import.meta.env.VITE_FIREBASE_APP_ID) {
+    if (
+      import.meta.env.VITE_FIREBASE_API_KEY &&
+      import.meta.env.VITE_FIREBASE_PROJECT_ID &&
+      import.meta.env.VITE_FIREBASE_APP_ID
+    ) {
       return {
         apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
         authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
@@ -60,78 +68,72 @@ export const DbProvider = ({ children }) => {
         appId: import.meta.env.VITE_FIREBASE_APP_ID
       };
     }
-    // 2. Fallback to manually entered configurations in LocalStorage
-    const local = localStorage.getItem('telesales_firebase_config');
-    return local ? JSON.parse(local) : null;
+    try {
+      const local = localStorage.getItem('telesales_firebase_config');
+      return local ? JSON.parse(local) : null;
+    } catch { return null; }
   });
 
-  // Sync statuses
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
-  const [firebaseUser, setFirebaseUser] = useState(null); // { uid, email }
+  const [firebaseUser, setFirebaseUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
 
-  // Local storage synchronization
+  // Use refs to hold stable references for use inside async closures
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  // ─── 2. LOCAL STORAGE SYNC ────────────────────────────────────────────────
   useEffect(() => {
-    localStorage.setItem('telesales_orders', JSON.stringify(orders));
+    try { localStorage.setItem('telesales_orders', JSON.stringify(orders)); } catch {}
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('telesales_products', JSON.stringify(products));
+    try { localStorage.setItem('telesales_products', JSON.stringify(products)); } catch {}
   }, [products]);
 
   useEffect(() => {
     localStorage.setItem('telesales_daily_target', dailyTarget.toString());
   }, [dailyTarget]);
 
-  // Bulk seeder for August 2026 data
-  // SAFE: Only adds orders that don't already exist by ID or phone+date.
-  // NEVER overwrites status or any field of an existing order.
-  useEffect(() => {
-    setOrders(prevOrders => {
-      const existingIds = new Set(prevOrders.map(o => o.id));
-      const existingPhoneDates = new Set(prevOrders.map(o => `${o.phone}__${o.date}`));
-      const newOrders = [];
-      
-      seedOrders.forEach(seeded => {
-        // Skip if already exists by ID or phone+date combination
-        const key = `${seeded.phone}__${seeded.date}`;
-        if (existingIds.has(seeded.id) || existingPhoneDates.has(key)) return;
-        newOrders.push(seeded);
-      });
-
-      if (newOrders.length > 0) {
-        console.log(`[Seeder] Added ${newOrders.length} new orders (existing orders untouched).`);
-        return [...prevOrders, ...newOrders];
-      }
-      return prevOrders; // No change - all orders already present
-    });
-  }, []);
-
   useEffect(() => {
     if (firebaseConfig) {
-      localStorage.setItem('telesales_firebase_config', JSON.stringify(firebaseConfig));
+      try { localStorage.setItem('telesales_firebase_config', JSON.stringify(firebaseConfig)); } catch {}
     } else {
       localStorage.removeItem('telesales_firebase_config');
     }
   }, [firebaseConfig]);
 
-  // Initialize theme from local storage on startup
+  // ─── 3. SAFE SEEDER — never overwrites existing orders ───────────────────
+  useEffect(() => {
+    setOrders(prev => {
+      const existingIds = new Set(prev.map(o => o.id));
+      const existingPhoneDates = new Set(prev.map(o => `${o.phone}__${o.date}`));
+      const newOrders = seedOrders.filter(s => {
+        const key = `${s.phone}__${s.date}`;
+        return !existingIds.has(s.id) && !existingPhoneDates.has(key);
+      });
+      if (newOrders.length === 0) return prev;
+      console.log(`[Seeder] Added ${newOrders.length} new orders (existing untouched).`);
+      return [...prev, ...newOrders];
+    });
+  }, []);
+
+  // ─── 4. INITIALIZE THEME ─────────────────────────────────────────────────
   useEffect(() => {
     const savedTheme = localStorage.getItem('telesales_theme') || 'violet';
     const themes = {
-      violet: { primary: '262 83% 58%', secondary: '291 91% 65%' },
+      violet:  { primary: '262 83% 58%', secondary: '291 91% 65%' },
       emerald: { primary: '142 70% 45%', secondary: '160 84% 39%' },
-      cyan: { primary: '190 90% 45%', secondary: '210 95% 55%' },
-      sunset: { primary: '15 95% 55%', secondary: '345 90% 55%' }
+      cyan:    { primary: '190 90% 45%', secondary: '210 95% 55%' },
+      sunset:  { primary: '15 95% 55%',  secondary: '345 90% 55%' }
     };
     const t = themes[savedTheme] || themes.violet;
     document.documentElement.style.setProperty('--primary-glow', t.primary);
     document.documentElement.style.setProperty('--secondary-glow', t.secondary);
   }, []);
 
-
-  // 2. FIREBASE AUTH & FIRESTORE SYNC ENGINE
+  // ─── 5. FIREBASE AUTH + FIRESTORE SYNC ENGINE ────────────────────────────
   useEffect(() => {
     if (!firebaseConfig) {
       setIsFirebaseConnected(false);
@@ -140,114 +142,149 @@ export const DbProvider = ({ children }) => {
       return;
     }
 
-    let unsubscribe = null;
+    let unsubscribeSnapshot = null;
     let unsubscribeAuth = null;
     setIsSyncing(true);
     setSyncError('');
 
-    try {
-      const apps = getApps();
-      const finalConfig = {
-        ...firebaseConfig,
-        authDomain: firebaseConfig.authDomain || `${firebaseConfig.projectId}.firebaseapp.com`,
-        storageBucket: firebaseConfig.storageBucket || `${firebaseConfig.projectId}.appspot.com`
-      };
-      const app = apps.length === 0 ? initializeApp(finalConfig) : apps[0];
-      const db = getFirestore(app);
-      const auth = getAuth(app);
+    const initFirebase = async () => {
+      try {
+        // FIX 1: Properly re-initialize Firebase when config changes.
+        // Delete any existing app so we can init with the new config.
+        const apps = getApps();
+        if (apps.length > 0) {
+          await deleteApp(apps[0]);
+        }
 
-      // Listen to Auth State changes dynamically
-      unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-        if (user) {
-          setIsFirebaseConnected(true);
-          setFirebaseUser({
-            uid: user.uid,
-            email: user.email
-          });
-          setSyncError('');
+        const finalConfig = {
+          ...firebaseConfig,
+          authDomain: firebaseConfig.authDomain || `${firebaseConfig.projectId}.firebaseapp.com`,
+          storageBucket: firebaseConfig.storageBucket || `${firebaseConfig.projectId}.appspot.com`
+        };
 
-          // Establish sync listener for this specific user's orders collection
-          const userOrdersRef = collection(db, 'users', user.uid, 'orders');
-          
-          if (unsubscribe) unsubscribe(); // unsubscribe previous database listener if exists
+        const app = initializeApp(finalConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
 
-          unsubscribe = onSnapshot(userOrdersRef, (snapshot) => {
-            setOrders(prevOrders => {
-              const localOrdersMap = new Map(prevOrders.map(o => [o.id, o]));
-              let hasChanges = false;
+        unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            setIsFirebaseConnected(true);
+            setFirebaseUser({ uid: user.uid, email: user.email });
+            setSyncError('');
 
-              snapshot.forEach(docSnap => {
-                const remoteOrder = { id: docSnap.id, ...docSnap.data() };
-                const localOrder = localOrdersMap.get(remoteOrder.id);
+            const userOrdersRef = collection(db, 'users', user.uid, 'orders');
 
-                if (!localOrder) {
-                  localOrdersMap.set(remoteOrder.id, remoteOrder);
-                  hasChanges = true;
-                } else if (remoteOrder.lastUpdated > localOrder.lastUpdated) {
-                  localOrdersMap.set(remoteOrder.id, remoteOrder);
-                  hasChanges = true;
-                } else if (localOrder.lastUpdated > remoteOrder.lastUpdated) {
-                  // Push local update to cloud
-                  setDoc(doc(userOrdersRef, localOrder.id), localOrder);
-                }
+            // FIX 3: On first login, upload all local orders to Firestore if cloud is empty.
+            try {
+              const cloudSnapshot = await getDocs(userOrdersRef);
+              if (cloudSnapshot.empty && ordersRef.current.length > 0) {
+                console.log(`[Firebase] Cloud empty. Uploading ${ordersRef.current.length} local orders…`);
+                const batch = writeBatch(db);
+                ordersRef.current.forEach(order => {
+                  const ref = doc(userOrdersRef, order.id);
+                  batch.set(ref, order);
+                });
+                await batch.commit();
+                console.log('[Firebase] Initial upload complete.');
+              }
+            } catch (uploadErr) {
+              console.warn('[Firebase] Initial upload failed:', uploadErr.message);
+            }
+
+            // Start real-time sync listener
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+            unsubscribeSnapshot = onSnapshot(userOrdersRef, (snapshot) => {
+              // FIX 2: Collect orders to push OUTSIDE of setOrders, then push after.
+              const ordersToUpload = [];
+
+              setOrders(prev => {
+                const localMap = new Map(prev.map(o => [o.id, o]));
+                let changed = false;
+
+                snapshot.forEach(docSnap => {
+                  const remote = { id: docSnap.id, ...docSnap.data() };
+                  const local = localMap.get(remote.id);
+
+                  if (!local) {
+                    // New order from cloud
+                    localMap.set(remote.id, remote);
+                    changed = true;
+                  } else if ((remote.lastUpdated || 0) > (local.lastUpdated || 0)) {
+                    // Cloud is newer → take cloud version
+                    localMap.set(remote.id, remote);
+                    changed = true;
+                  } else if ((local.lastUpdated || 0) > (remote.lastUpdated || 0)) {
+                    // Local is newer → mark for upload (do NOT call setDoc here)
+                    ordersToUpload.push(local);
+                  }
+                });
+
+                return changed ? Array.from(localMap.values()) : prev;
               });
 
-              if (hasChanges) {
-                return Array.from(localOrdersMap.values());
+              // FIX 2 (cont): Push stale-local orders to cloud AFTER state update
+              if (ordersToUpload.length > 0) {
+                ordersToUpload.forEach(order => {
+                  setDoc(doc(userOrdersRef, order.id), order).catch(e =>
+                    console.warn('[Firebase] Push local order failed:', e.message)
+                  );
+                });
               }
-              return prevOrders;
+
+              setIsSyncing(false);
+            }, (err) => {
+              console.error('[Firestore] Snapshot error:', err);
+              if (err.code === 'permission-denied') {
+                setSyncError('Permission denied. Check Firestore Security Rules in Firebase Console.');
+              } else {
+                setSyncError('Sync error: ' + err.message);
+              }
+              setIsSyncing(false);
             });
-            setIsSyncing(false);
-          }, (dbErr) => {
-            console.error("Firestore sync error:", dbErr);
-            if (dbErr.code === 'permission-denied') {
-              setSyncError("Sync error: Firestore permission denied. Verify database security rules.");
-            } else {
-              setSyncError("Database sync error: " + dbErr.message);
-            }
-            setIsSyncing(false);
-          });
 
-        } else {
-          // User logged out
-          setIsFirebaseConnected(false);
-          setFirebaseUser(null);
-          setIsSyncing(false);
-          if (unsubscribe) {
-            unsubscribe();
-            unsubscribe = null;
+          } else {
+            // Logged out
+            setIsFirebaseConnected(false);
+            setFirebaseUser(null);
+            setIsSyncing(false);
+            if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
           }
-        }
-      });
+        });
 
-    } catch (err) {
-      console.error("Firebase init error:", err);
-      setSyncError("Init failed: " + err.message);
-      setIsFirebaseConnected(false);
-      setIsSyncing(false);
-    }
+      } catch (err) {
+        console.error('[Firebase] Init error:', err);
+        setSyncError('Firebase init failed: ' + err.message);
+        setIsFirebaseConnected(false);
+        setIsSyncing(false);
+      }
+    };
+
+    initFirebase();
 
     return () => {
       if (unsubscribeAuth) unsubscribeAuth();
-      if (unsubscribe) unsubscribe();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
   }, [firebaseConfig]);
 
 
-  // 3. SECURE AUTHENTICATION METHODS
+  // ─── 6. AUTH METHODS ─────────────────────────────────────────────────────
+  const getActiveApp = () => {
+    const apps = getApps();
+    if (apps.length === 0) throw new Error('Firebase not initialized. Enter credentials first.');
+    return apps[0];
+  };
+
   const loginWithEmail = async (email, password) => {
     setSyncError('');
-    const apps = getApps();
-    if (apps.length === 0) throw new Error("Firebase not initialized");
-    const auth = getAuth(apps[0]);
+    const auth = getAuth(getActiveApp());
     await signInWithEmailAndPassword(auth, email, password);
   };
 
   const registerWithEmail = async (email, password) => {
     setSyncError('');
-    const apps = getApps();
-    if (apps.length === 0) throw new Error("Firebase not initialized");
-    const auth = getAuth(apps[0]);
+    const auth = getAuth(getActiveApp());
     await createUserWithEmailAndPassword(auth, email, password);
   };
 
@@ -260,23 +297,25 @@ export const DbProvider = ({ children }) => {
 
   const loginWithGoogle = async () => {
     setSyncError('');
-    const apps = getApps();
-    if (apps.length === 0) throw new Error("Firebase not initialized. Go to credentials tab first.");
-    const auth = getAuth(apps[0]);
+    const auth = getAuth(getActiveApp());
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   };
 
   const resetPassword = async (email) => {
     setSyncError('');
-    const apps = getApps();
-    if (apps.length === 0) throw new Error("Firebase not initialized. Go to credentials tab first.");
-    const auth = getAuth(apps[0]);
+    const auth = getAuth(getActiveApp());
     await sendPasswordResetEmail(auth, email);
   };
 
 
-  // 4. DATABASE OPERATIONS
+  // ─── 7. DATABASE OPERATIONS ───────────────────────────────────────────────
+  const getDb = () => {
+    const apps = getApps();
+    if (apps.length === 0) return null;
+    return getFirestore(apps[0]);
+  };
+
   const addOrder = async (orderData) => {
     const newOrder = {
       id: generateId(),
@@ -294,48 +333,43 @@ export const DbProvider = ({ children }) => {
 
     setOrders(prev => [newOrder, ...prev]);
 
-    if (isFirebaseConnected && firebaseConfig && firebaseUser) {
+    if (isFirebaseConnected && firebaseUser) {
       try {
-        const apps = getApps();
-        const db = getFirestore(apps[0]);
-        await setDoc(doc(db, 'users', firebaseUser.uid, 'orders', newOrder.id), newOrder);
-      } catch (e) {
-        console.warn("Offline write cached:", e);
-      }
+        const db = getDb();
+        if (db) await setDoc(doc(db, 'users', firebaseUser.uid, 'orders', newOrder.id), newOrder);
+      } catch (e) { console.warn('[Firebase] addOrder offline:', e.message); }
     }
   };
 
   const updateOrder = async (id, updatedFields) => {
-    const updatedTimestamp = Date.now();
+    const ts = Date.now();
     let finalOrder = null;
 
     setOrders(prev => prev.map(order => {
       if (order.id === id) {
-        finalOrder = { 
-          ...order, 
-          ...updatedFields, 
+        finalOrder = {
+          ...order,
+          ...updatedFields,
           price: updatedFields.price !== undefined ? parseInt(updatedFields.price, 10) || 0 : order.price,
-          lastUpdated: updatedTimestamp 
+          lastUpdated: ts
         };
         return finalOrder;
       }
       return order;
     }));
 
-    if (isFirebaseConnected && firebaseConfig && firebaseUser && finalOrder) {
+    if (isFirebaseConnected && firebaseUser && finalOrder) {
       try {
-        const apps = getApps();
-        const db = getFirestore(apps[0]);
-        await setDoc(doc(db, 'users', firebaseUser.uid, 'orders', id), finalOrder);
-      } catch (e) {
-        console.warn("Offline update cached:", e);
-      }
+        const db = getDb();
+        if (db) await setDoc(doc(db, 'users', firebaseUser.uid, 'orders', id), finalOrder);
+      } catch (e) { console.warn('[Firebase] updateOrder offline:', e.message); }
     }
   };
 
+  // FIX 4: Use ordersRef to avoid stale closure in bulkUpdateOrders
   const bulkUpdateOrders = async (ids, updatedFields) => {
     if (!ids || ids.length === 0) return;
-    const updatedTimestamp = Date.now();
+    const ts = Date.now();
 
     setOrders(prev => prev.map(order => {
       if (ids.includes(order.id)) {
@@ -343,59 +377,47 @@ export const DbProvider = ({ children }) => {
           ...order,
           ...updatedFields,
           price: updatedFields.price !== undefined ? parseInt(updatedFields.price, 10) || 0 : order.price,
-          lastUpdated: updatedTimestamp
+          lastUpdated: ts
         };
       }
       return order;
     }));
 
-    if (isFirebaseConnected && firebaseConfig && firebaseUser) {
+    if (isFirebaseConnected && firebaseUser) {
       try {
-        const apps = getApps();
-        const db = getFirestore(apps[0]);
+        const db = getDb();
+        if (!db) return;
         const batch = writeBatch(db);
-        
-        orders.forEach(order => {
+        // Use ordersRef.current (always fresh) instead of stale `orders`
+        ordersRef.current.forEach(order => {
           if (ids.includes(order.id)) {
-            const finalOrder = {
+            const updated = {
               ...order,
               ...updatedFields,
               price: updatedFields.price !== undefined ? parseInt(updatedFields.price, 10) || 0 : order.price,
-              lastUpdated: updatedTimestamp
+              lastUpdated: ts
             };
-            const docRef = doc(db, 'users', firebaseUser.uid, 'orders', order.id);
-            batch.set(docRef, finalOrder);
+            batch.set(doc(db, 'users', firebaseUser.uid, 'orders', order.id), updated);
           }
         });
-        
         await batch.commit();
-      } catch (e) {
-        console.warn("Offline bulk sync cached:", e);
-      }
+      } catch (e) { console.warn('[Firebase] bulkUpdate offline:', e.message); }
     }
   };
 
   const deleteOrder = async (id) => {
-    setOrders(prev => prev.filter(order => order.id !== id));
+    setOrders(prev => prev.filter(o => o.id !== id));
 
-    if (isFirebaseConnected && firebaseConfig && firebaseUser) {
+    if (isFirebaseConnected && firebaseUser) {
       try {
-        const apps = getApps();
-        const db = getFirestore(apps[0]);
-        await deleteDoc(doc(db, 'users', firebaseUser.uid, 'orders', id));
-      } catch (e) {
-        console.warn("Offline delete cached:", e);
-      }
+        const db = getDb();
+        if (db) await deleteDoc(doc(db, 'users', firebaseUser.uid, 'orders', id));
+      } catch (e) { console.warn('[Firebase] deleteOrder offline:', e.message); }
     }
   };
 
-  const saveProducts = (updatedProducts) => {
-    setProducts(updatedProducts);
-  };
-
-  const saveDailyTarget = (target) => {
-    setDailyTarget(target);
-  };
+  const saveProducts = (updatedProducts) => setProducts(updatedProducts);
+  const saveDailyTarget = (target) => setDailyTarget(target);
 
   const saveFirebaseConfig = (config) => {
     setFirebaseConfig(config);
@@ -410,9 +432,7 @@ export const DbProvider = ({ children }) => {
     localStorage.removeItem('telesales_orders');
   };
 
-  const importOrders = (newOrders) => {
-    setOrders(newOrders);
-  };
+  const importOrders = (newOrders) => setOrders(newOrders);
 
   return (
     <DbContext.Provider value={{
