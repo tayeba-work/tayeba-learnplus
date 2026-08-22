@@ -18,6 +18,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail
 } from 'firebase/auth';
 import seedOrders from './seed_orders.json';
@@ -61,11 +63,12 @@ export const DbProvider = ({ children }) => {
       import.meta.env.VITE_FIREBASE_PROJECT_ID &&
       import.meta.env.VITE_FIREBASE_APP_ID
     ) {
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
       return {
         apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
+        projectId:         projectId,
+        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`,
         messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
         appId:             import.meta.env.VITE_FIREBASE_APP_ID
       };
@@ -269,7 +272,17 @@ export const DbProvider = ({ children }) => {
   const loginWithEmail    = (email, pw) => signInWithEmailAndPassword(getAuth(getNamedApp()), email, pw);
   const registerWithEmail = (email, pw) => createUserWithEmailAndPassword(getAuth(getNamedApp()), email, pw);
   const logout            = ()          => signOut(getAuth(getNamedApp()));
-  const loginWithGoogle   = ()          => signInWithPopup(getAuth(getNamedApp()), new GoogleAuthProvider());
+  const loginWithGoogle   = async () => {
+    const auth = getAuth(getNamedApp());
+    const provider = new GoogleAuthProvider();
+    // Use redirect on mobile (PWA/phone), popup on desktop
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      await signInWithRedirect(auth, provider);
+    } else {
+      await signInWithPopup(auth, provider);
+    }
+  };
   const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getNamedApp()), email);
 
   // ─── 7. DB OPERATIONS ─────────────────────────────────────────────────────
