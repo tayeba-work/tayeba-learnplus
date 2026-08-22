@@ -253,11 +253,37 @@ function AppContent() {
   );
 }
 
+// ─── Error Boundary — shows readable error instead of blank black screen ───
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('[AppCrash]', error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0b0f19', color: 'white', padding: '24px', gap: '16px', fontFamily: 'sans-serif' }}>
+          <div style={{ fontSize: '32px' }}>⚠️</div>
+          <div style={{ fontSize: '16px', fontWeight: 700 }}>App Error — details below:</div>
+          <pre style={{ fontSize: '11px', color: '#f87171', background: 'rgba(239,68,68,0.1)', padding: '16px', borderRadius: '8px', maxWidth: '90vw', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            {this.state.error?.message || String(this.state.error)}
+          </pre>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', background: 'hsl(262 83% 58%)', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   return (
-    <DbProvider>
-      <AppContent />
-    </DbProvider>
+    <ErrorBoundary>
+      <DbProvider>
+        <AppContent />
+      </DbProvider>
+    </ErrorBoundary>
   );
 }
 
