@@ -36,7 +36,11 @@ const MagicalParser = ({ onSaveSuccess }) => {
     date: new Date().toISOString().split('T')[0]
   });
 
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [savedOrder, setSavedOrder] = useState(null);
+
   const [notification, setNotification] = useState('');
+
 
   // Run parser on rawText changes and trigger scanning animation
   useEffect(() => {
@@ -130,8 +134,36 @@ const MagicalParser = ({ onSaveSuccess }) => {
     addOrder(formData);
     playSuccessSound();
     
-    // Success flow
-    triggerNotification('✅ Order added successfully!');
+    // Store order in state for WhatsApp share
+    setSavedOrder(formData);
+    setShowShareModal(true);
+    
+    triggerNotification('✅ Order saved successfully!');
+  };
+
+  const formatWhatsAppText = (order) => {
+    if (!order) return '';
+    return `📋 *New Order Summary*
+━━━━━━━━━━━━━━━━━━
+👤 *Customer:* ${order.name}
+📞 *Phone:* ${order.phone}
+📍 *Address:* ${order.address || 'N/A'}
+📦 *Product:* ${order.productName}
+💰 *Price:* ৳ ${order.price} BDT
+📝 *Notes:* ${order.notes || 'N/A'}
+━━━━━━━━━━━━━━━━━━
+⏱️ *Saved At:* ${new Date().toLocaleString('en-GB')}`;
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!savedOrder) return;
+    const text = encodeURIComponent(formatWhatsAppText(savedOrder));
+    const waUrl = `https://api.whatsapp.com/send?text=${text}`;
+    window.open(waUrl, '_blank');
+    handleCloseAndProceed();
+  };
+
+  const handleCloseAndProceed = () => {
     setRawText('');
     setFormData({
       name: '',
@@ -142,13 +174,13 @@ const MagicalParser = ({ onSaveSuccess }) => {
       notes: '',
       date: new Date().toISOString().split('T')[0]
     });
-
+    setShowShareModal(false);
+    setSavedOrder(null);
     if (onSaveSuccess) {
-      setTimeout(() => {
-        onSaveSuccess();
-      }, 1000);
+      onSaveSuccess();
     }
   };
+
 
   return (
     <div className="app-content animate-slide-up">
@@ -390,6 +422,135 @@ Shoriatpur jela, bedorganj upozila
           <CheckCircle size={16} /> Save Order Entry
         </button>
       </form>
+
+      {/* WhatsApp Share Confirmation Modal */}
+      {showShareModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 7, 12, 0.85)',
+          backdropFilter: 'blur(15px)',
+          WebkitBackdropFilter: 'blur(15px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          boxSizing: 'border-box'
+        }} className="animate-fade-in">
+          
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '400px',
+            borderRadius: '24px',
+            border: '1px solid rgba(34, 197, 94, 0.25)', // Green border for WhatsApp theme
+            background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.03), rgba(11, 15, 25, 0.98))',
+            padding: '20px',
+            boxSizing: 'border-box',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(34, 197, 94, 0.05)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                background: 'rgba(34, 197, 94, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                {/* SVG WhatsApp icon */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12.012 2C6.48 2 2.01 6.47 2.01 12c0 1.91.54 3.7 1.48 5.24L2 22l4.9-1.28c1.47.8 3.14 1.28 4.93 1.28 5.53 0 10-4.47 10-10S17.542 2 12.012 2zm0 1.67c4.6 0 8.33 3.73 8.33 8.33s-3.73 8.33-8.33 8.33c-1.61 0-3.11-.46-4.38-1.26l-.32-.2-2.92.77.78-2.85-.22-.35c-.88-1.4-1.39-3.05-1.39-4.77.01-4.6 3.74-8.33 8.33-8.33z" fill="#22c55e" />
+                  <path d="M15.42 13.56c-.22-.11-1.3-.64-1.51-.72-.21-.08-.37-.12-.53.12-.16.24-.61.76-.75.92-.14.16-.27.18-.49.07-.22-.11-.93-.34-1.77-1.09-.65-.58-1.09-1.3-1.22-1.52-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.03-.28-.02-.39-.05-.11-.53-1.28-.73-1.76-.19-.47-.39-.41-.53-.41-.14 0-.3 0-.46.02-.16.02-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.09 3.62.57.25 1.02.4 1.37.51.57.18 1.1.15 1.51.09.46-.07 1.3-.53 1.48-1.04.18-.51.18-.95.13-1.04-.05-.1-.19-.15-.41-.26z" fill="#22c55e" />
+                </svg>
+              </div>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'white', margin: 0 }}>
+                  Share to WhatsApp Group
+                </h3>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  Send order details to your sales group chat
+                </span>
+              </div>
+            </div>
+
+            {/* Text Preview Area */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.25)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-light)',
+              padding: '12px 14px',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              boxSizing: 'border-box'
+            }}>
+              <pre style={{
+                fontSize: '11px',
+                color: '#e2e8f0',
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'monospace',
+                lineHeight: '1.5'
+              }}>
+                {savedOrder ? formatWhatsAppText(savedOrder) : ''}
+              </pre>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleWhatsAppShare}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                  color: 'white',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(34, 197, 94, 0.2)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Send to WhatsApp Group
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCloseAndProceed}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 700
+                }}
+              >
+                Done (Without Sharing)
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };
