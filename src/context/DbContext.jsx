@@ -166,6 +166,24 @@ export const DbProvider = ({ children }) => {
         const db   = getFirestore(app);
         const auth = getAuth(app);
 
+        // Await redirect result first to ensure mobile Google Sign-In completes before listening to state
+        try {
+          const redirectResult = await getRedirectResult(auth);
+          if (redirectResult?.user) {
+            console.log('[Firebase] Redirect result resolved user:', redirectResult.user.email);
+            setFirebaseUser({ uid: redirectResult.user.uid, email: redirectResult.user.email });
+            setIsFirebaseConnected(true);
+          }
+        } catch (redirectErr) {
+          console.error('[Firebase] Redirect error:', redirectErr);
+          // Standard Firebase error messages for storage blockages
+          if (redirectErr.code === 'auth/web-storage-unsupported') {
+            setSyncError('Browser blocks storage. Please use Email/Password sign-in or disable tracking prevention.');
+          } else {
+            setSyncError('Google Login failed: ' + redirectErr.message);
+          }
+        }
+
         unsubAuth = onAuthStateChanged(auth, async (user) => {
           if (user) {
             setIsFirebaseConnected(true);
