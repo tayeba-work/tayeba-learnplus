@@ -1,23 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useDb } from '../context/DbContext';
 import { 
   Settings as SettingsIcon, 
   Target, 
   ShoppingBag, 
-  Cloud, 
   Trash2, 
-  Database,
   Plus,
   Wifi,
   WifiOff,
   AlertTriangle,
   User,
   Key,
-  Download,
-  Upload,
   Volume2,
   Palette,
-  Check
+  Check,
+  Camera
 } from 'lucide-react';
 
 const Settings = () => {
@@ -33,15 +30,20 @@ const Settings = () => {
     registerWithEmail,
     loginWithGoogle,
     logout,
+    updateUserProfile,
+    userProfile,
     saveProducts,
     saveDailyTarget,
     clearAllData,
-    importOrders,
-    orders,
-    lastUser
+    orders
   } = useDb();
 
-  // Settings states
+  // Profile configuration states
+  const [profileName, setProfileName] = useState(userProfile.displayName || 'Tayeba Samma');
+  const [profilePhone, setProfilePhone] = useState(userProfile.phone || '');
+  const [profileRole, setProfileRole] = useState(userProfile.role || 'Sales Executive');
+
+  // General states
   const [newTarget, setNewTarget] = useState(dailyTarget);
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
@@ -50,13 +52,16 @@ const Settings = () => {
   const [activeTheme, setActiveTheme] = useState(() => localStorage.getItem('telesales_theme') || 'violet');
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('telesales_sound_enabled') !== 'false');
 
-  // Inline User credentials forms (for logging in if not authenticated)
+  // Inline User credentials forms
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
 
   const [notification, setNotification] = useState('');
+  
+  // Danger zone reset confirmation
   const [confirmClear, setConfirmClear] = useState(false);
+  const [resetTimer, setResetTimer] = useState(10); // 10 seconds wait timer
 
   // Statistics
   const todayStr = new Date().toISOString().split('T')[0];
@@ -73,11 +78,69 @@ const Settings = () => {
     };
   }, [orders, todayStr]);
 
+  // Sync state values on profile change
+  useEffect(() => {
+    if (userProfile) {
+      setProfileName(userProfile.displayName || 'Tayeba Samma');
+      setProfilePhone(userProfile.phone || '');
+      setProfileRole(userProfile.role || 'Sales Executive');
+    }
+  }, [userProfile]);
+
+  // Count down timer for Danger Zone
+  useEffect(() => {
+    let interval = null;
+    if (confirmClear && resetTimer > 0) {
+      interval = setInterval(() => {
+        setResetTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (!confirmClear) {
+      setResetTimer(10); // reset back to 10s if cancelled
+    }
+    return () => clearInterval(interval);
+  }, [confirmClear, resetTimer]);
+
   // Handlers
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    try {
+      await updateUserProfile({
+        displayName: profileName.trim(),
+        phone: profilePhone.trim(),
+        role: profileRole.trim()
+      });
+      triggerNotification('👤 Profile details updated!');
+    } catch (err) {
+      triggerNotification('❌ Profile update failed: ' + err.message);
+    }
+  };
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 800 * 1024) { // 800KB max to fit nicely in state
+      triggerNotification('⚠️ Image is too large. Please use a smaller picture (under 800KB).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const base64String = event.target.result;
+        await updateUserProfile({ avatar: base64String });
+        triggerNotification('📸 Profile picture updated!');
+      } catch (err) {
+        triggerNotification('❌ Photo upload failed: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveTarget = (e) => {
     e.preventDefault();
     saveDailyTarget(parseInt(newTarget, 10) || 10);
-    triggerNotification('✅ Daily target updated.');
+    triggerNotification('🎯 Daily sales goal updated.');
   };
 
   const handleAddProduct = (e) => {
@@ -93,7 +156,7 @@ const Settings = () => {
     saveProducts([...products, newProd]);
     setNewProdName('');
     setNewProdPrice('');
-    triggerNotification('✅ Product added successfully.');
+    triggerNotification('✅ Product added to catalog.');
   };
 
   const handleDeleteProduct = (prodId) => {
@@ -114,87 +177,14 @@ const Settings = () => {
     document.documentElement.style.setProperty('--primary-glow', t.primary);
     document.documentElement.style.setProperty('--secondary-glow', t.secondary);
     localStorage.setItem('telesales_theme', themeId);
-    triggerNotification(`🎨 Theme changed to ${themeId.charAt(0).toUpperCase() + themeId.slice(1)}!`);
+    triggerNotification(`🎨 Color scheme changed!`);
   };
 
   const handleSoundToggle = () => {
     const nextVal = !soundEnabled;
     setSoundEnabled(nextVal);
     localStorage.setItem('telesales_sound_enabled', nextVal.toString());
-    triggerNotification(nextVal ? '🔊 Chime feedback enabled' : '🔇 Chime feedback muted');
-  };
-
-  const handleExportBackup = () => {
-    try {
-      const backup = {
-        exportedAt: new Date().toISOString(),
-        exportedAtLocal: new Date().toLocaleString('en-GB'),
-        appVersion: 'LearnPlus Telesales v1',
-        totalOrders: orders.length,
-        orders: orders
-      };
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `learnplus_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      triggerNotification(`✅ Backup downloaded! ${orders.length} orders saved.`);
-    } catch (e) {
-      triggerNotification('❌ Export failed: ' + e.message);
-    }
-  };
-
-  const handleImportBackup = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = '';
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        let parsed = JSON.parse(event.target.result);
-        const orderList = Array.isArray(parsed) ? parsed : (parsed.orders || []);
-        
-        if (!Array.isArray(orderList) || orderList.length === 0) {
-          triggerNotification('⚠️ Invalid file: No orders found.');
-          return;
-        }
-        
-        const isValid = orderList.every(o => o.name && o.phone && o.date);
-        if (!isValid) {
-          triggerNotification('⚠️ Invalid structure: missing required fields.');
-          return;
-        }
-        
-        const existingMap = new Map(orders.map(o => [o.id, o]));
-        let restoredCount = 0;
-        let addedCount = 0;
-        
-        orderList.forEach(backupOrder => {
-          if (existingMap.has(backupOrder.id)) {
-            existingMap.set(backupOrder.id, { 
-              ...existingMap.get(backupOrder.id), 
-              status: backupOrder.status, 
-              notes: backupOrder.notes || '' 
-            });
-            restoredCount++;
-          } else {
-            existingMap.set(backupOrder.id, backupOrder);
-            addedCount++;
-          }
-        });
-        
-        importOrders(Array.from(existingMap.values()));
-        triggerNotification(`✅ Restored! ${restoredCount} updated, ${addedCount} added.`);
-      } catch (err) {
-        triggerNotification('❌ Failed to read backup: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
+    triggerNotification(nextVal ? '🔊 Audio feedback enabled' : '🔇 Audio feedback muted');
   };
 
   const handleUserAuth = async (e) => {
@@ -204,7 +194,7 @@ const Settings = () => {
     try {
       if (isRegistering) {
         await registerWithEmail(loginEmail.trim(), loginPassword.trim());
-        triggerNotification('🎉 Account created successfully!');
+        triggerNotification('🎉 Account registered successfully!');
       } else {
         await loginWithEmail(loginEmail.trim(), loginPassword.trim());
         triggerNotification('🔑 Logged in successfully!');
@@ -212,7 +202,7 @@ const Settings = () => {
       setLoginEmail('');
       setLoginPassword('');
     } catch (err) {
-      triggerNotification('❌ Error: ' + err.message);
+      triggerNotification('❌ Sign-in failed: ' + err.message);
     }
   };
 
@@ -221,23 +211,23 @@ const Settings = () => {
       await loginWithGoogle();
       triggerNotification('🔑 Logged in with Google!');
     } catch (err) {
-      triggerNotification('❌ Google Error: ' + err.message);
+      triggerNotification('❌ Sign-in failed: ' + err.message);
     }
   };
 
   const handleLogout = async () => {
     try {
       await logout();
-      triggerNotification('🔌 Logged out successfully.');
+      triggerNotification('🔌 Signed out successfully.');
     } catch (err) {
-      triggerNotification('❌ Error: ' + err.message);
+      triggerNotification('❌ Sign-out failed: ' + err.message);
     }
   };
 
   const handlePurge = () => {
     clearAllData();
     setConfirmClear(false);
-    triggerNotification('🗑️ All local orders cleared.');
+    triggerNotification('🗑️ Database completely reset.');
   };
 
   const triggerNotification = (msg) => {
@@ -249,7 +239,7 @@ const Settings = () => {
     <div className="app-content animate-slide-up" style={{ paddingBottom: '30px' }}>
       <h2 className="section-title">
         <SettingsIcon size={20} className="text-gradient" />
-        Settings & Account
+        My Settings
       </h2>
 
       {notification && (
@@ -273,47 +263,155 @@ const Settings = () => {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         
-        {/* 1. Account & Cloud sync status */}
-        <div className="glass-card target-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="avatar-initials" style={{ width: '48px', height: '48px', fontSize: '20px', background: 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))', color: 'white', fontWeight: 800 }}>
-              {firebaseUser ? firebaseUser.email.charAt(0).toUpperCase() : lastUser.charAt(0).toUpperCase()}
+        {/* 1. Sleek Account Profile Settings Panel */}
+        <div className="glass-card target-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          
+          <h3 className="stat-title" style={{ color: 'white', fontSize: '14px', borderBottom: '1px solid var(--border-light)', paddingBottom: '8px', marginBottom: '4px' }}>
+            👤 Profile & Identity
+          </h3>
+
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+            
+            {/* Avatar Selector */}
+            <div style={{ position: 'relative', width: '70px', height: '70px', flexShrink: 0 }}>
+              {userProfile.avatar ? (
+                <img 
+                  src={userProfile.avatar} 
+                  alt="Profile" 
+                  style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '2.5px solid hsl(var(--primary-glow))' }}
+                />
+              ) : (
+                <div 
+                  style={{ 
+                    width: '70px', 
+                    height: '70px', 
+                    borderRadius: '50%', 
+                    background: 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))',
+                    color: 'white',
+                    fontSize: '26px',
+                    fontWeight: 900,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2.5px solid hsl(var(--primary-glow))',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  {profileName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              
+              {/* Photo Upload Trigger Icon overlay */}
+              <label 
+                style={{ 
+                  position: 'absolute', 
+                  bottom: '-2px', 
+                  right: '-2px', 
+                  background: 'hsl(var(--primary-glow))', 
+                  color: 'white', 
+                  borderRadius: '50%', 
+                  width: '24px', 
+                  height: '24px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  cursor: 'pointer',
+                  border: '2px solid #0b0f19',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                  transition: 'transform 0.2s ease'
+                }}
+                className="hover-scale"
+                title="Change Photo"
+              >
+                <Camera size={12} />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleAvatarUpload} 
+                  style={{ display: 'none' }} 
+                />
+              </label>
             </div>
-            <div style={{ flexGrow: 1, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {firebaseUser ? lastUser : 'Guest User'}
-                </h3>
-                <span className="feedback-chip active" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(139,92,246,0.15)', color: 'hsl(var(--primary-glow))', borderColor: 'rgba(139,92,246,0.2)' }}>
-                  {firebaseUser ? 'Synced Profile' : 'Local Mode'}
+
+            {/* Sync Badge and Description */}
+            <div style={{ flexGrow: 1, minWidth: '150px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: 'white' }}>{profileName}</span>
+                <span className="feedback-chip active" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderColor: 'rgba(16,185,129,0.15)' }}>
+                  {firebaseUser ? 'Connected Account' : 'Guest Profile'}
                 </span>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {firebaseUser ? firebaseUser.email : 'No Cloud account linked'}
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
+                {firebaseUser ? firebaseUser.email : 'Your data is currently saved on this phone only'}
               </span>
             </div>
           </div>
 
-          {/* Sync Connection Badge */}
-          <div className={`sync-status-indicator ${isFirebaseConnected ? 'sync-connected' : 'sync-disconnected'}`} style={{ padding: '8px 12px', borderRadius: '8px', margin: 0 }}>
+          {/* Sync Status Badge */}
+          <div className={`sync-status-indicator ${isFirebaseConnected ? 'sync-connected' : 'sync-disconnected'}`} style={{ padding: '8px 12px', borderRadius: '8px', margin: 0, border: '1px solid rgba(255,255,255,0.03)' }}>
             {isFirebaseConnected ? (
               <>
-                <Wifi size={14} className={isSyncing ? 'animate-pulse' : ''} />
-                <span style={{ fontSize: '11px', fontWeight: 600 }}>Cloud Server Connected & Synced</span>
+                <Wifi size={14} className={isSyncing ? 'animate-pulse' : ''} style={{ color: '#10b981' }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>✓ Your data is secure in Cloud</span>
               </>
             ) : (
               <>
-                <WifiOff size={14} />
-                <span style={{ fontSize: '11px', fontWeight: 600 }}>Local Offline Sandbox (No cloud sync)</span>
+                <WifiOff size={14} style={{ color: 'var(--text-gray-dark)' }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Offline (Saved locally on this phone)</span>
               </>
             )}
           </div>
 
           {syncError && (
             <div style={{ fontSize: '11px', color: 'var(--status-cancelled)', padding: '6px 10px', background: 'rgba(239,68,68,0.05)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.1)' }}>
-              ⚠️ Sync alert: {syncError}
+              ⚠️ Sync Notice: {syncError}
             </div>
           )}
+
+          {/* Profile Editing Form */}
+          <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            <div className="field-group">
+              <span className="field-label" style={{ fontSize: '9px' }}>Full Name</span>
+              <input
+                type="text"
+                className="input-field"
+                style={{ padding: '8px 10px', fontSize: '12px' }}
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Full Name"
+                required
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="field-group" style={{ flex: 1 }}>
+                <span className="field-label" style={{ fontSize: '9px' }}>Phone Number</span>
+                <input
+                  type="tel"
+                  className="input-field"
+                  style={{ padding: '8px 10px', fontSize: '12px' }}
+                  value={profilePhone}
+                  onChange={(e) => setProfilePhone(e.target.value)}
+                  placeholder="017XXXXXXXX"
+                />
+              </div>
+              <div className="field-group" style={{ flex: 1 }}>
+                <span className="field-label" style={{ fontSize: '9px' }}>Role / Designation</span>
+                <input
+                  type="text"
+                  className="input-field"
+                  style={{ padding: '8px 10px', fontSize: '12px' }}
+                  value={profileRole}
+                  onChange={(e) => setProfileRole(e.target.value)}
+                  placeholder="Sales Representative"
+                />
+              </div>
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ padding: '10px', fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>
+              Save Profile Details
+            </button>
+          </form>
 
           {/* User Signin/Signout Action Card */}
           <div style={{ borderTop: '1px dashed var(--border-light)', paddingTop: '10px', marginTop: '4px' }}>
@@ -324,13 +422,13 @@ const Settings = () => {
                 className="btn-secondary" 
                 style={{ width: '100%', padding: '10px', color: 'var(--status-cancelled)', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.03)', fontSize: '12px', fontWeight: 700 }}
               >
-                Log Out from Cloud Account
+                Sign Out
               </button>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <form onSubmit={handleUserAuth} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <h4 style={{ fontSize: '11px', color: 'white', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {isRegistering ? 'Create Cloud Backup Account' : 'Sign in to sync with Cloud'}
+                    {isRegistering ? 'Create Backup Account' : 'Sign in to Sync with Cloud'}
                   </h4>
                   <input
                     type="email"
@@ -351,7 +449,7 @@ const Settings = () => {
                     required
                   />
                   <button type="submit" className="btn-primary" style={{ padding: '9px', fontSize: '12px', fontWeight: 700 }}>
-                    {isRegistering ? 'Register & Link' : 'Login & Link'}
+                    {isRegistering ? 'Register & Connect' : 'Login & Connect'}
                   </button>
                 </form>
                 
@@ -368,7 +466,7 @@ const Settings = () => {
                     onClick={handleGoogleSignIn}
                     style={{ background: 'transparent', border: 'none', color: 'hsl(var(--primary-glow))', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
                   >
-                    ⚡ Login with Google
+                    ⚡ Google Login
                   </button>
                 </div>
               </div>
@@ -379,10 +477,10 @@ const Settings = () => {
         {/* 2. Daily Sales Goal */}
         <div className="glass-card settings-section">
           <h3 className="stat-title" style={{ color: 'white' }}>
-            <Target size={16} /> Daily Sales Target
+            <Target size={16} /> My Sales Goal
           </h3>
           <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
-            Set your daily goal to track achievement percentage on the dashboard.
+            Configure your daily sales target to track progress gauges on the dashboard.
           </p>
           <form onSubmit={handleSaveTarget} style={{ display: 'flex', gap: '8px' }}>
             <input
@@ -404,10 +502,10 @@ const Settings = () => {
         {/* 3. Product Catalog Management */}
         <div className="glass-card settings-section">
           <h3 className="stat-title" style={{ color: 'white' }}>
-            <ShoppingBag size={16} /> Product Price Catalog
+            <ShoppingBag size={16} /> My Products
           </h3>
           <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
-            Configure course products and prices to calculate total sales value during parsing.
+            Add course products and set prices to compute total order value automatically when parsing messages.
           </p>
 
           <form onSubmit={handleAddProduct} style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
@@ -469,11 +567,11 @@ const Settings = () => {
         {/* 4. Themes & Customizations */}
         <div className="glass-card settings-section">
           <h3 className="stat-title" style={{ color: 'white', marginBottom: '12px' }}>
-            <Palette size={16} /> Appearance & Personalization
+            <Palette size={16} /> Colors & Audio
           </h3>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-gray-light)' }}>Theme Color Color:</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-gray-light)' }}>Theme Color:</span>
             <div style={{ display: 'flex', gap: '8px' }}>
               {[
                 { id: 'violet', color: '#8b5cf6', name: 'Violet' },
@@ -547,56 +645,7 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* 5. Database Backup & Restore */}
-        <div className="glass-card settings-section" style={{ border: '1px solid rgba(251, 191, 36, 0.2)', background: 'linear-gradient(135deg, rgba(251,191,36,0.04), rgba(11,15,25,0.8))' }}>
-          <h3 className="stat-title" style={{ color: 'white' }}>
-            <Database size={16} style={{ color: '#fbbf24' }} /> Database Backup & Restore
-          </h3>
-
-          <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
-            <p style={{ fontSize: '11px', color: '#fbbf24', margin: 0, lineHeight: 1.5, fontWeight: 600 }}>
-              Backup your data periodically. You can download the JSON backup file and restore it on any other phone or device.
-            </p>
-          </div>
-
-          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Orders in Database</div>
-              <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', marginTop: '2px' }}>{orders.length} Logs</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '10px', color: 'var(--status-confirmed)', fontWeight: 700 }}>✅ {stats.success} Success</div>
-              <div style={{ fontSize: '10px', color: 'var(--status-pending)', fontWeight: 700, marginTop: '2px' }}>⏳ {stats.today} Today</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={handleExportBackup}
-              className="btn-primary"
-              style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-            >
-              <Download size={15} /> Download Full Backup File ({orders.length} orders)
-            </button>
-
-            <label
-              className="btn-secondary"
-              style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: 0, boxSizing: 'border-box' }}
-            >
-              <Upload size={15} /> Restore database from backup file
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportBackup}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-        </div>
-
-        {/* 6. Danger Zone (Purge Data) */}
+        {/* 5. Danger Zone (Purge Data with 10s Timer) */}
         <div className="glass-card settings-section" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
           <h3 className="stat-title" style={{ color: 'var(--status-cancelled)' }}>
             <AlertTriangle size={16} /> Danger Zone
@@ -609,7 +658,10 @@ const Settings = () => {
             <button 
               type="button" 
               className="btn-secondary" 
-              onClick={() => setConfirmClear(true)}
+              onClick={() => {
+                setConfirmClear(true);
+                setResetTimer(10);
+              }}
               style={{ 
                 color: 'var(--status-cancelled)', 
                 background: 'rgba(239, 68, 68, 0.05)',
@@ -633,9 +685,18 @@ const Settings = () => {
                   type="button" 
                   onClick={handlePurge} 
                   className="btn-primary" 
-                  style={{ background: 'var(--status-cancelled)', flexGrow: 1, padding: '8px 12px', fontSize: '12px', fontWeight: 700 }}
+                  disabled={resetTimer > 0}
+                  style={{ 
+                    background: resetTimer > 0 ? '#4b2e2e' : 'var(--status-cancelled)', 
+                    color: resetTimer > 0 ? '#94a3b8' : 'white',
+                    cursor: resetTimer > 0 ? 'not-allowed' : 'pointer',
+                    flexGrow: 1, 
+                    padding: '8px 12px', 
+                    fontSize: '12px', 
+                    fontWeight: 700 
+                  }}
                 >
-                  Yes, Purge Local Orders
+                  {resetTimer > 0 ? `Yes, Purge Data (${resetTimer}s)` : 'Yes, Purge Data'}
                 </button>
                 <button 
                   type="button" 

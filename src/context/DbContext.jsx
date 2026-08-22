@@ -8,7 +8,8 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -65,8 +66,17 @@ export const DbProvider = ({ children }) => {
     return s ? parseInt(s, 10) : 10;
   });
 
+  // User Profile details (Name, Phone, base64 Avatar)
+  const [userProfile, setUserProfile] = useState(() => {
+    try {
+      const s = localStorage.getItem('telesales_profile');
+      return s ? JSON.parse(s) : { displayName: 'Tayeba Samma', phone: '', avatar: null };
+    } catch {
+      return { displayName: 'Tayeba Samma', phone: '', avatar: null };
+    }
+  });
+
   const [firebaseConfig, setFirebaseConfig] = useState(() => {
-    // Priority 1: Vercel environment variables (baked at build time)
     if (
       import.meta.env.VITE_FIREBASE_API_KEY &&
       import.meta.env.VITE_FIREBASE_PROJECT_ID &&
@@ -82,7 +92,6 @@ export const DbProvider = ({ children }) => {
         appId:             import.meta.env.VITE_FIREBASE_APP_ID
       };
     }
-    // Priority 2: Manually saved config in localStorage
     try {
       const s = localStorage.getItem('telesales_firebase_config');
       return s ? JSON.parse(s) : null;
@@ -91,16 +100,15 @@ export const DbProvider = ({ children }) => {
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
   const [firebaseUser, setFirebaseUser]   = useState(null);
-  const [authReady, setAuthReady]         = useState(false); // true once auth state resolves
+  const [authReady, setAuthReady]         = useState(false);
   const [isSyncing, setIsSyncing]         = useState(false);
   const [syncError, setSyncError]         = useState('');
   
-  // Last logged in user's readable name to display on reload
+  // Last logged in username for fast cache load spinner
   const [lastUser, setLastUser] = useState(() => {
     return localStorage.getItem('telesales_last_username') || 'Tayeba Samma';
   });
 
-  // Always-fresh ref to orders (avoids stale closures in async code)
   const ordersRef = useRef(orders);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
 
@@ -116,6 +124,10 @@ export const DbProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('telesales_daily_target', dailyTarget.toString());
   }, [dailyTarget]);
+
+  useEffect(() => {
+    try { localStorage.setItem('telesales_profile', JSON.stringify(userProfile)); } catch {}
+  }, [userProfile]);
 
   useEffect(() => {
     if (firebaseConfig) {
@@ -176,25 +188,21 @@ export const DbProvider = ({ children }) => {
           storageBucket: firebaseConfig.storageBucket || `${firebaseConfig.projectId}.appspot.com`
         };
 
-        const app  = initializeApp(cfg); // Init default app
+        const app  = initializeApp(cfg); 
         const db   = getFirestore(app);
         const auth = getAuth(app);
 
-        // Await redirect result first to ensure mobile Google Sign-In completes before listening to state
         try {
           const redirectResult = await getRedirectResult(auth);
           if (redirectResult?.user) {
             console.log('[Firebase] Redirect result resolved user:', redirectResult.user.email);
-            const name = formatUsername(redirectResult.user.email);
             setFirebaseUser({ uid: redirectResult.user.uid, email: redirectResult.user.email });
-            setLastUser(name);
-            localStorage.setItem('telesales_last_username', name);
             setIsFirebaseConnected(true);
           }
         } catch (redirectErr) {
           console.error('[Firebase] Redirect error:', redirectErr);
           if (redirectErr.code === 'auth/web-storage-unsupported') {
-            setSyncError('Browser blocks storage. Please use Email/Password sign-in or disable tracking prevention.');
+            setSyncError('Browser blocks storage. Please use Email/Password sign-in.');
           } else {
             setSyncError('Google Login failed: ' + redirectErr.message);
           }
@@ -203,16 +211,32 @@ export const DbProvider = ({ children }) => {
         unsubAuth = onAuthStateChanged(auth, async (user) => {
           if (user) {
             setIsFirebaseConnected(true);
-            const name = formatUsername(user.email);
             setFirebaseUser({ uid: user.uid, email: user.email });
-            setLastUser(name);
-            localStorage.setItem('telesales_last_username', name);
             setAuthReady(true);
             setSyncError('');
 
+            // Sync User Profile details from cloud if available
+            try {
+              const uDoc = await getDoc(doc(db, 'users', user.uid));
+              if (uDoc.exists() && uDoc.data().profile) {
+                const cloudProfile = uDoc.data().profile;
+                setUserProfile(cloudProfile);
+                localStorage.setItem('telesales_profile', JSON.stringify(cloudProfile));
+                if (cloudProfile.displayName) {
+                  setLastUser(cloudProfile.displayName);
+                  localStorage.setItem('telesales_last_username', cloudProfile.displayName);
+                }
+              } else {
+                // If cloud doesn't have a profile yet, seed it with our local state
+                await setDoc(doc(db, 'users', user.uid), { profile: userProfile }, { merge: true });
+              }
+            } catch (pErr) {
+              console.warn('[Firebase] Load profile error:', pErr.message);
+            }
+
             const colRef = collection(db, 'users', user.uid, 'orders');
 
-            // FIX: Upload local orders to cloud if Firestore is empty
+            // Sync local orders to cloud if Firestore empty
             try {
               const snap = await getDocs(colRef);
               if (snap.empty && ordersRef.current.length > 0) {
@@ -227,7 +251,6 @@ export const DbProvider = ({ children }) => {
 
             if (unsubSnapshot) unsubSnapshot();
 
-            // Collect orders to push OUTSIDE setOrders callback
             unsubSnapshot = onSnapshot(colRef, (snap) => {
               const toUpload = [];
 
@@ -243,14 +266,13 @@ export const DbProvider = ({ children }) => {
                   } else if ((remote.lastUpdated || 0) > (local.lastUpdated || 0)) {
                     map.set(remote.id, remote); changed = true;
                   } else if ((local.lastUpdated || 0) > (remote.lastUpdated || 0)) {
-                    toUpload.push(local); // push outside
+                    toUpload.push(local);
                   }
                 });
 
                 return changed ? Array.from(map.values()) : prev;
               });
 
-              // Push stale-local orders AFTER state update
               toUpload.forEach(o =>
                 setDoc(doc(colRef, o.id), o).catch(e =>
                   console.warn('[Firebase] push stale order:', e.message)
@@ -262,7 +284,7 @@ export const DbProvider = ({ children }) => {
               console.error('[Firestore]', err);
               setSyncError(
                 err.code === 'permission-denied'
-                  ? 'Permission denied — check Firestore Security Rules.'
+                  ? 'Permission denied — check database rules.'
                   : 'Sync error: ' + err.message
               );
               setIsSyncing(false);
@@ -302,7 +324,7 @@ export const DbProvider = ({ children }) => {
   // ─── 6. AUTH ──────────────────────────────────────────────────────────────
   const getDefaultApp = () => {
     const app = getApps().find(a => a.name === '[DEFAULT]');
-    if (!app) throw new Error('Firebase not initialized. Enter credentials first.');
+    if (!app) throw new Error('Firebase not initialized.');
     return app;
   };
 
@@ -333,7 +355,30 @@ export const DbProvider = ({ children }) => {
   
   const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getDefaultApp()), email);
 
-  // ─── 7. DB OPERATIONS ─────────────────────────────────────────────────────
+  // ─── 7. PROFILE UPDATE ─────────────────────────────────────────────────────
+  const updateUserProfile = async (fields) => {
+    const updated = { ...userProfile, ...fields };
+    setUserProfile(updated);
+    localStorage.setItem('telesales_profile', JSON.stringify(updated));
+
+    if (fields.displayName) {
+      setLastUser(fields.displayName);
+      localStorage.setItem('telesales_last_username', fields.displayName);
+    }
+
+    if (isFirebaseConnected && firebaseUser) {
+      try {
+        const app = getDefaultApp();
+        const db = getFirestore(app);
+        await setDoc(doc(db, 'users', firebaseUser.uid), { profile: updated }, { merge: true });
+        console.log('[Firebase] Profile synced successfully.');
+      } catch (e) {
+        console.warn('[Firebase] Sync profile failed:', e.message);
+      }
+    }
+  };
+
+  // ─── 8. DB OPERATIONS ─────────────────────────────────────────────────────
   const colRef = () => {
     const app = getApps().find(a => a.name === '[DEFAULT]');
     if (!app || !firebaseUser) return null;
@@ -399,9 +444,9 @@ export const DbProvider = ({ children }) => {
 
   return (
     <DbContext.Provider value={{
-      orders, products, dailyTarget, firebaseConfig, lastUser,
+      orders, products, dailyTarget, firebaseConfig, lastUser, userProfile,
       isFirebaseConnected, firebaseUser, authReady, isSyncing, syncError,
-      loginWithEmail, registerWithEmail, loginWithGoogle, resetPassword, logout,
+      loginWithEmail, registerWithEmail, loginWithGoogle, resetPassword, logout, updateUserProfile,
       addOrder, updateOrder, bulkUpdateOrders, deleteOrder,
       saveProducts, saveDailyTarget, saveFirebaseConfig, clearAllData, importOrders
     }}>

@@ -116,8 +116,29 @@ function AppContent() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0b0f19', gap: '16px' }}>
         <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.1)', borderTop: '3px solid hsl(262 83% 58%)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <div style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', fontWeight: 600 }}>Please wait, "{lastUser || 'User'}"…</div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: '14px', color: 'var(--text-muted, #64748b)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          Please wait, <span className="loading-name-reveal">"{lastUser || 'User'}"</span>…
+        </div>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .loading-name-reveal {
+            display: inline-block;
+            opacity: 0;
+            filter: blur(5px);
+            transform: translateY(4px) scale(0.97);
+            animation: nameReveal 1s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+            color: hsl(var(--primary-glow));
+            font-weight: 800;
+            text-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+          }
+          @keyframes nameReveal {
+            to {
+              opacity: 1;
+              filter: blur(0);
+              transform: translateY(0) scale(1);
+            }
+          }
+        `}</style>
       </div>
     );
   }
