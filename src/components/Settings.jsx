@@ -17,9 +17,7 @@ import {
   Upload,
   Volume2,
   Palette,
-  Check,
-  CheckCircle,
-  FileText
+  Check
 } from 'lucide-react';
 
 const Settings = () => {
@@ -33,17 +31,15 @@ const Settings = () => {
     syncError,
     loginWithEmail,
     registerWithEmail,
+    loginWithGoogle,
     logout,
     saveProducts,
     saveDailyTarget,
-    saveFirebaseConfig,
     clearAllData,
     importOrders,
-    orders
+    orders,
+    lastUser
   } = useDb();
-
-  // Settings internal sub-tabs
-  const [subTab, setSubTab] = useState('profile'); // 'profile' or 'credentials'
 
   // Settings states
   const [newTarget, setNewTarget] = useState(dailyTarget);
@@ -54,15 +50,7 @@ const Settings = () => {
   const [activeTheme, setActiveTheme] = useState(() => localStorage.getItem('telesales_theme') || 'violet');
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('telesales_sound_enabled') !== 'false');
 
-  // Firebase configuration forms
-  const [fbApiKey, setFbApiKey] = useState(firebaseConfig?.apiKey || '');
-  const [fbAuthDomain, setFbAuthDomain] = useState(firebaseConfig?.authDomain || '');
-  const [fbProjectId, setFbProjectId] = useState(firebaseConfig?.projectId || '');
-  const [fbStorageBucket, setFbStorageBucket] = useState(firebaseConfig?.storageBucket || '');
-  const [fbMessagingSenderId, setFbMessagingSenderId] = useState(firebaseConfig?.messagingSenderId || '');
-  const [fbAppId, setFbAppId] = useState(firebaseConfig?.appId || '');
-
-  // User credentials forms
+  // Inline User credentials forms (for logging in if not authenticated)
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -154,7 +142,7 @@ const Settings = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      triggerNotification(`✅ Backup downloaded! ${orders.length} orders saved with all statuses.`);
+      triggerNotification(`✅ Backup downloaded! ${orders.length} orders saved.`);
     } catch (e) {
       triggerNotification('❌ Export failed: ' + e.message);
     }
@@ -163,36 +151,36 @@ const Settings = () => {
   const handleImportBackup = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    e.target.value = ''; // reset input so same file can be re-imported
+    e.target.value = '';
     
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         let parsed = JSON.parse(event.target.result);
-        
-        // Support both raw array and our wrapped backup format
         const orderList = Array.isArray(parsed) ? parsed : (parsed.orders || []);
         
         if (!Array.isArray(orderList) || orderList.length === 0) {
-          triggerNotification('⚠️ Invalid file: No orders found in backup.');
+          triggerNotification('⚠️ Invalid file: No orders found.');
           return;
         }
         
         const isValid = orderList.every(o => o.name && o.phone && o.date);
         if (!isValid) {
-          triggerNotification('⚠️ Invalid file structure: missing required fields.');
+          triggerNotification('⚠️ Invalid structure: missing required fields.');
           return;
         }
         
-        // MERGE: restore existing orders with backed-up statuses, add new ones
         const existingMap = new Map(orders.map(o => [o.id, o]));
         let restoredCount = 0;
         let addedCount = 0;
         
         orderList.forEach(backupOrder => {
           if (existingMap.has(backupOrder.id)) {
-            // Update status from backup (restore the saved status)
-            existingMap.set(backupOrder.id, { ...existingMap.get(backupOrder.id), status: backupOrder.status, notes: backupOrder.notes });
+            existingMap.set(backupOrder.id, { 
+              ...existingMap.get(backupOrder.id), 
+              status: backupOrder.status, 
+              notes: backupOrder.notes || '' 
+            });
             restoredCount++;
           } else {
             existingMap.set(backupOrder.id, backupOrder);
@@ -201,43 +189,12 @@ const Settings = () => {
         });
         
         importOrders(Array.from(existingMap.values()));
-        triggerNotification(`✅ Restored! ${restoredCount} statuses updated, ${addedCount} new orders added.`);
+        triggerNotification(`✅ Restored! ${restoredCount} updated, ${addedCount} added.`);
       } catch (err) {
         triggerNotification('❌ Failed to read backup: ' + err.message);
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleSaveFirebase = (e) => {
-    e.preventDefault();
-    if (!fbApiKey.trim() || !fbProjectId.trim() || !fbAppId.trim()) {
-      triggerNotification('⚠️ API Key, Project ID, and App ID are required.');
-      return;
-    }
-
-    const config = {
-      apiKey: fbApiKey.trim(),
-      authDomain: fbAuthDomain.trim(),
-      projectId: fbProjectId.trim(),
-      storageBucket: fbStorageBucket.trim(),
-      messagingSenderId: fbMessagingSenderId.trim(),
-      appId: fbAppId.trim()
-    };
-
-    saveFirebaseConfig(config);
-    triggerNotification('⚡ Configuration saved. Ready to log in!');
-  };
-
-  const handleDisconnectFirebase = () => {
-    saveFirebaseConfig(null);
-    setFbApiKey('');
-    setFbAuthDomain('');
-    setFbProjectId('');
-    setFbStorageBucket('');
-    setFbMessagingSenderId('');
-    setFbAppId('');
-    triggerNotification('🔌 Firebase disconnected.');
   };
 
   const handleUserAuth = async (e) => {
@@ -247,7 +204,7 @@ const Settings = () => {
     try {
       if (isRegistering) {
         await registerWithEmail(loginEmail.trim(), loginPassword.trim());
-        triggerNotification('🎉 Account created and logged in!');
+        triggerNotification('🎉 Account created successfully!');
       } else {
         await loginWithEmail(loginEmail.trim(), loginPassword.trim());
         triggerNotification('🔑 Logged in successfully!');
@@ -255,8 +212,16 @@ const Settings = () => {
       setLoginEmail('');
       setLoginPassword('');
     } catch (err) {
-      console.error("Auth process error:", err);
       triggerNotification('❌ Error: ' + err.message);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await loginWithGoogle();
+      triggerNotification('🔑 Logged in with Google!');
+    } catch (err) {
+      triggerNotification('❌ Google Error: ' + err.message);
     }
   };
 
@@ -265,7 +230,7 @@ const Settings = () => {
       await logout();
       triggerNotification('🔌 Logged out successfully.');
     } catch (err) {
-      triggerNotification('❌ Error signing out: ' + err.message);
+      triggerNotification('❌ Error: ' + err.message);
     }
   };
 
@@ -281,10 +246,10 @@ const Settings = () => {
   };
 
   return (
-    <div className="app-content animate-slide-up">
+    <div className="app-content animate-slide-up" style={{ paddingBottom: '30px' }}>
       <h2 className="section-title">
         <SettingsIcon size={20} className="text-gradient" />
-        Application Settings
+        Settings & Account
       </h2>
 
       {notification && (
@@ -306,562 +271,386 @@ const Settings = () => {
         </div>
       )}
 
-      {/* Internal Sub-Tabs Navigation */}
-      <div style={{ display: 'flex', gap: '4px', background: 'rgba(255, 255, 255, 0.03)', padding: '4px', borderRadius: '12px', marginBottom: '14px', border: '1px solid var(--border-light)' }}>
-        <button
-          type="button"
-          onClick={() => setSubTab('profile')}
-          className={`sub-tab-btn ${subTab === 'profile' ? 'active' : ''}`}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '12px',
-            fontWeight: 700,
-            background: subTab === 'profile' ? 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))' : 'transparent',
-            color: 'white',
-            cursor: 'pointer',
-            transition: 'all 0.25s ease'
-          }}
-        >
-          👤 Profile Settings
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('credentials')}
-          className={`sub-tab-btn ${subTab === 'credentials' ? 'active' : ''}`}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '12px',
-            fontWeight: 700,
-            background: subTab === 'credentials' ? 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))' : 'transparent',
-            color: 'white',
-            cursor: 'pointer',
-            transition: 'all 0.25s ease'
-          }}
-        >
-          🔒 Cloud Credentials
-        </button>
-      </div>
-
-      {/* SUB-TAB 1: PROFILE SETTINGS */}
-      {subTab === 'profile' && (
-        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          
-          {/* A. Identity Card */}
-          <div className="glass-card target-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div className="avatar-initials" style={{ width: '48px', height: '48px', fontSize: '20px' }}>
-                {firebaseUser ? firebaseUser.email.charAt(0).toUpperCase() : 'T'}
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'white', margin: 0 }}>
-                    {firebaseUser ? firebaseUser.email.split('@')[0] : 'Tayeba Samma'}
-                  </h3>
-                  <span className="feedback-chip active" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(139,92,246,0.15)', color: 'hsl(var(--primary-glow))', borderColor: 'rgba(139,92,246,0.2)' }}>
-                    Telesales Pro
-                  </span>
-                </div>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {firebaseUser ? firebaseUser.email : 'Tayeba Samma (Local Sandbox)'}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        
+        {/* 1. Account & Cloud sync status */}
+        <div className="glass-card target-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="avatar-initials" style={{ width: '48px', height: '48px', fontSize: '20px', background: 'linear-gradient(135deg, hsl(var(--primary-glow)), hsl(var(--secondary-glow)))', color: 'white', fontWeight: 800 }}>
+              {firebaseUser ? firebaseUser.email.charAt(0).toUpperCase() : lastUser.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {firebaseUser ? lastUser : 'Guest User'}
+                </h3>
+                <span className="feedback-chip active" style={{ fontSize: '9px', padding: '1px 6px', background: 'rgba(139,92,246,0.15)', color: 'hsl(var(--primary-glow))', borderColor: 'rgba(139,92,246,0.2)' }}>
+                  {firebaseUser ? 'Synced Profile' : 'Local Mode'}
                 </span>
               </div>
-            </div>
-
-            {/* Performance Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', borderTop: '1px dashed var(--border-light)', paddingTop: '12px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '14px', fontWeight: 800, color: 'white' }}>{stats.total}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Total</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '14px', fontWeight: 800, color: 'white' }}>{stats.today}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Today</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--status-confirmed)' }}>{stats.success}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Success</div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--status-cancelled)' }}>{stats.cancel}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Cancel</div>
-              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {firebaseUser ? firebaseUser.email : 'No Cloud account linked'}
+              </span>
             </div>
           </div>
 
-          {/* B. Themes & Sound */}
-          <div className="glass-card settings-section">
-            <h3 className="stat-title" style={{ color: 'white', marginBottom: '12px' }}>
-              <Palette size={16} /> Personalization Settings
-            </h3>
-
-            {/* Theme selection dots */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-gray-light)' }}>Theme Color:</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {[
-                  { id: 'violet', color: '#8b5cf6', name: 'Violet' },
-                  { id: 'emerald', color: '#10b981', name: 'Emerald' },
-                  { id: 'cyan', color: '#06b6d4', name: 'Cyan' },
-                  { id: 'sunset', color: '#f97316', name: 'Sunset' },
-                ].map((theme) => (
-                  <button
-                    key={theme.id}
-                    type="button"
-                    onClick={() => handleThemeChange(theme.id)}
-                    style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      backgroundColor: theme.color,
-                      border: activeTheme === theme.id ? '2px solid white' : '2px solid transparent',
-                      boxShadow: activeTheme === theme.id ? `0 0 10px ${theme.color}` : 'none',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s ease',
-                      padding: 0
-                    }}
-                    title={theme.name}
-                  >
-                    {activeTheme === theme.id && <Check size={12} style={{ color: 'white' }} />}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Sound switch */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed var(--border-light)', paddingTop: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Volume2 size={16} style={{ color: 'var(--text-gray-light)' }} />
-                <div>
-                  <div style={{ fontSize: '12px', color: 'white', fontWeight: 600 }}>Dopamine Sound Feedback</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-gray-dark)' }}>Play futuristic beep on successful order</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleSoundToggle}
-                className={`feedback-chip ${soundEnabled ? 'active' : ''}`}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                  background: soundEnabled ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.02)',
-                  borderColor: soundEnabled ? '#10b981' : 'var(--border-light)',
-                  color: soundEnabled ? '#10b981' : 'var(--text-gray-dark)'
-                }}
-              >
-                {soundEnabled ? 'ENABLED' : 'MUTED'}
-              </button>
-            </div>
-          </div>
-
-          {/* C. Daily Target */}
-          <form onSubmit={handleSaveTarget} className="glass-card settings-section">
-            <h3 className="stat-title" style={{ color: 'white' }}>
-              <Target size={16} /> Daily Sales Target
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="number"
-                className="input-field"
-                value={newTarget}
-                onChange={(e) => setNewTarget(e.target.value)}
-                placeholder="Orders target per day"
-                min="1"
-              />
-              <button type="submit" className="btn-primary" style={{ padding: '12px 16px' }}>Save Target</button>
-            </div>
-          </form>
-
-          {/* D. Product Catalog */}
-          <div className="glass-card settings-section">
-            <h3 className="stat-title" style={{ color: 'white' }}>
-              <ShoppingBag size={16} /> Product Directory
-            </h3>
-            
-            {/* Products List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto', marginBottom: '10px', paddingRight: '4px' }}>
-              {products.map(p => (
-                <div className="product-row-item animate-fade-in" key={p.id} style={{ padding: '6px 10px', borderRadius: '10px' }}>
-                  <div>
-                    <strong style={{ fontSize: '13px', color: 'white' }}>{p.name}</strong>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className="feedback-chip active" style={{ fontSize: '10px', background: 'rgba(16,185,129,0.08)', color: '#10b981', borderColor: 'rgba(16,185,129,0.12)' }}>
-                      {p.price.toLocaleString()} TK
-                    </span>
-                    <button 
-                      type="button" 
-                      onClick={() => handleDeleteProduct(p.id)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--status-cancelled)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-                      title="Delete Product"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Add Product Form */}
-            <form onSubmit={handleAddProduct} className="product-add-form" style={{ display: 'flex', gap: '6px' }}>
-              <input
-                type="text"
-                className="input-field"
-                style={{ fontSize: '12px', padding: '8px 10px', flex: 2 }}
-                placeholder="Product Name"
-                value={newProdName}
-                onChange={(e) => setNewProdName(e.target.value)}
-                required
-              />
-              <input
-                type="number"
-                className="input-field"
-                style={{ fontSize: '12px', padding: '8px 10px', flex: 1 }}
-                placeholder="Price"
-                value={newProdPrice}
-                onChange={(e) => setNewProdPrice(e.target.value)}
-                required
-              />
-              <button type="submit" className="btn-primary" style={{ padding: '8px 12px' }} title="Add product">
-                <Plus size={16} />
-              </button>
-            </form>
-          </div>
-
-          {/* E. JSON Backup Operations */}
-          <div className="glass-card settings-section" style={{ border: '1px solid rgba(251, 191, 36, 0.2)', background: 'linear-gradient(135deg, rgba(251,191,36,0.04), rgba(11,15,25,0.8))' }}>
-            <h3 className="stat-title" style={{ color: 'white' }}>
-              <Database size={16} style={{ color: '#fbbf24' }} /> 💾 Data Backup & Restore
-            </h3>
-
-            {/* Warning banner */}
-            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
-              <p style={{ fontSize: '11px', color: '#fbbf24', margin: 0, lineHeight: 1.5, fontWeight: 600 }}>
-                Firebase setup করার আগে অবশ্যই একটা Backup নিন। নতুন Google account-এ login করলে local data দেখা যাবে না।
-              </p>
-            </div>
-
-            {/* Current data summary */}
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Current Database</div>
-                <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', marginTop: '2px' }}>{orders.length} Orders</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '10px', color: 'var(--status-confirmed)', fontWeight: 700 }}>✅ {orders.filter(o => ['confirmed','shipped','delivered'].includes(o.status)).length} Successful</div>
-                <div style={{ fontSize: '10px', color: 'var(--status-pending)', fontWeight: 700, marginTop: '2px' }}>⏳ {orders.filter(o => o.status === 'pending').length} Pending</div>
-                <div style={{ fontSize: '10px', color: 'var(--status-cancelled)', fontWeight: 700, marginTop: '2px' }}>❌ {orders.filter(o => ['cancelled','returned'].includes(o.status)).length} Cancelled</div>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={handleExportBackup}
-                className="btn-primary"
-                style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-              >
-                <Download size={15} /> Download Full Backup ({orders.length} orders + statuses)
-              </button>
-
-              <label
-                className="btn-secondary"
-                style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: 0, boxSizing: 'border-box' }}
-              >
-                <Upload size={15} /> Restore from Backup File
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportBackup}
-                  style={{ display: 'none' }}
-                />
-              </label>
-            </div>
-            <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-              Restore করলে আপনার সব status ফিরে আসবে। নতুন orders add হবে, পুরোনো কিছু মুছবে না।
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* SUB-TAB 2: DATABASE & CLOUD CREDENTIALS */}
-      {subTab === 'credentials' && (
-        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          
-          {/* A. Firebase Cloud Sync / Connection Badge */}
-          <div className="glass-card settings-section">
-            <h3 className="stat-title" style={{ color: 'white' }}>
-              <Cloud size={16} /> Firebase Cloud Database status
-            </h3>
-            
-            {firebaseConfig ? (
-              <div className={`sync-status-indicator ${firebaseUser ? 'sync-connected' : 'sync-disconnected'}`} style={{ margin: '8px 0', padding: '10px' }}>
-                {firebaseUser ? (
-                  <>
-                    <Wifi size={16} className={isSyncing ? 'animate-pulse' : ''} />
-                    <div>
-                      <strong style={{ fontSize: '12px', display: 'block' }}>Cloud Server Connected</strong>
-                      <span style={{ fontSize: '10px', opacity: 0.8 }}>Syncing database logs under UID: {firebaseUser.uid.substring(0, 10)}...</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <WifiOff size={16} />
-                    <div>
-                      <strong style={{ fontSize: '12px', display: 'block' }}>Firebase Active, Offline Mode</strong>
-                      <span style={{ fontSize: '10px', opacity: 0.8 }}>Please sign in below to sync orders.</span>
-                    </div>
-                  </>
-                )}
-              </div>
+          {/* Sync Connection Badge */}
+          <div className={`sync-status-indicator ${isFirebaseConnected ? 'sync-connected' : 'sync-disconnected'}`} style={{ padding: '8px 12px', borderRadius: '8px', margin: 0 }}>
+            {isFirebaseConnected ? (
+              <>
+                <Wifi size={14} className={isSyncing ? 'animate-pulse' : ''} />
+                <span style={{ fontSize: '11px', fontWeight: 600 }}>Cloud Server Connected & Synced</span>
+              </>
             ) : (
-              <div className="sync-status-indicator sync-disconnected" style={{ margin: '8px 0', padding: '10px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-gray-dark)', borderColor: 'var(--border-light)' }}>
-                <WifiOff size={16} />
-                <div>
-                  <strong style={{ fontSize: '12px', display: 'block', color: 'var(--text-muted)' }}>Local Sandbox Active</strong>
-                  <span style={{ fontSize: '10px' }}>No Firebase config loaded. Setup Firebase credentials below to sync.</span>
-                </div>
-              </div>
-            )}
-
-            {syncError && (
-              <div style={{ fontSize: '12px', color: 'var(--status-cancelled)', padding: '8px 12px', background: 'rgba(239,68,68,0.05)', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.1)', marginTop: '8px' }}>
-                ⚠️ Sync Error: {syncError}
-              </div>
+              <>
+                <WifiOff size={14} />
+                <span style={{ fontSize: '11px', fontWeight: 600 }}>Local Offline Sandbox (No cloud sync)</span>
+              </>
             )}
           </div>
 
-          {/* B. Firebase Login/Register Form */}
-          {firebaseConfig && (
-            <div className="glass-card settings-section">
-              <h3 className="stat-title" style={{ color: 'white', marginBottom: '12px' }}>
-                <User size={16} /> Cloud User Authentication
-              </h3>
-
-              {firebaseUser ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--text-gray-light)', background: 'rgba(16, 185, 129, 0.05)', padding: '10px', borderRadius: '10px', border: '1px solid rgba(16,185,129,0.1)' }}>
-                    🎯 Signed in securely as <strong>{firebaseUser.email}</strong>. Data automatically uploads to cloud.
-                  </div>
-                  <button type="button" onClick={handleLogout} className="btn-secondary" style={{ width: '100%', padding: '10px', color: 'var(--status-cancelled)', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.03)' }}>
-                    Disconnect Profile (Log Out)
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleUserAuth} className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <h4 style={{ fontSize: '12px', color: 'white', fontWeight: 700, marginBottom: '2px' }}>
-                    {isRegistering ? 'Create New Telesales Account' : 'Sign In to Cloud Database'}
-                  </h4>
-                  
-                  <div className="field-group">
-                    <span className="field-label" style={{ fontSize: '9px' }}><User size={8} /> Email</span>
-                    <input
-                      type="email"
-                      className="input-field"
-                      style={{ padding: '8px 10px', fontSize: '12px' }}
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      placeholder="name@gmail.com"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="field-group">
-                    <span className="field-label" style={{ fontSize: '9px' }}><Key size={8} /> Password</span>
-                    <input
-                      type="password"
-                      className="input-field"
-                      style={{ padding: '8px 10px', fontSize: '12px' }}
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Password"
-                      required
-                    />
-                  </div>
-
-                  <button type="submit" className="btn-primary" style={{ padding: '10px', fontSize: '12px', marginTop: '4px' }}>
-                    {isRegistering ? 'Create Account & Connect' : 'Log In & Connect'}
-                  </button>
-
-                  <button 
-                    type="button" 
-                    onClick={() => setIsRegistering(!isRegistering)}
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-gray-dark)', fontSize: '11px', textDecoration: 'underline', cursor: 'pointer', marginTop: '2px' }}
-                  >
-                    {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Create one'}
-                  </button>
-                </form>
-              )}
+          {syncError && (
+            <div style={{ fontSize: '11px', color: 'var(--status-cancelled)', padding: '6px 10px', background: 'rgba(239,68,68,0.05)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.1)' }}>
+              ⚠️ Sync alert: {syncError}
             </div>
           )}
 
-          {/* C. Firebase Config Setup */}
-          <div className="glass-card settings-section">
-            <h3 className="stat-title" style={{ color: 'white', marginBottom: '12px' }}>
-              <Key size={16} /> Firebase Project Credentials
-            </h3>
-            
-            <form onSubmit={handleSaveFirebase} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div className="field-group">
-                <span className="field-label" style={{ fontSize: '9px' }}>Firebase API Key *</span>
-                <input
-                  type="password"
-                  className="input-field"
-                  style={{ padding: '8px 10px', fontSize: '12px' }}
-                  value={fbApiKey}
-                  onChange={(e) => setFbApiKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  required
-                />
-              </div>
-              
-              <div className="field-group">
-                <span className="field-label" style={{ fontSize: '9px' }}>Project ID *</span>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 10px', fontSize: '12px' }}
-                  value={fbProjectId}
-                  onChange={(e) => setFbProjectId(e.target.value)}
-                  placeholder="project-12345"
-                  required
-                />
-              </div>
-              
-              <div className="field-group">
-                <span className="field-label" style={{ fontSize: '9px' }}>App ID *</span>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 10px', fontSize: '12px' }}
-                  value={fbAppId}
-                  onChange={(e) => setFbAppId(e.target.value)}
-                  placeholder="1:123:web:123"
-                  required
-                />
-              </div>
-              
-              <details style={{ margin: '2px 0' }}>
-                <summary style={{ fontSize: '10px', color: 'var(--text-gray-dark)', cursor: 'pointer', outline: 'none' }}>Optional Config Parameters</summary>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px', paddingLeft: '8px', borderLeft: '1px solid var(--border-light)' }}>
-                  <div className="field-group">
-                    <span className="field-label" style={{ fontSize: '9px' }}>Auth Domain</span>
-                    <input
-                      type="text"
-                      className="input-field"
-                      style={{ padding: '8px 10px', fontSize: '12px' }}
-                      value={fbAuthDomain}
-                      onChange={(e) => setFbAuthDomain(e.target.value)}
-                      placeholder="project-12345.firebaseapp.com"
-                    />
-                  </div>
-                  <div className="field-group">
-                    <span className="field-label" style={{ fontSize: '9px' }}>Storage Bucket</span>
-                    <input
-                      type="text"
-                      className="input-field"
-                      style={{ padding: '8px 10px', fontSize: '12px' }}
-                      value={fbStorageBucket}
-                      onChange={(e) => setFbStorageBucket(e.target.value)}
-                      placeholder="project-12345.appspot.com"
-                    />
-                  </div>
-                  <div className="field-group">
-                    <span className="field-label" style={{ fontSize: '9px' }}>Messaging Sender ID</span>
-                    <input
-                      type="text"
-                      className="input-field"
-                      style={{ padding: '8px 10px', fontSize: '12px' }}
-                      value={fbMessagingSenderId}
-                      onChange={(e) => setFbMessagingSenderId(e.target.value)}
-                      placeholder="9876543210"
-                    />
-                  </div>
-                </div>
-              </details>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                <button type="submit" className="btn-primary" style={{ flexGrow: 1, padding: '8px', fontSize: '12px' }}>
-                  Save Config
-                </button>
-                {firebaseConfig && (
-                  <button 
-                    type="button" 
-                    onClick={handleDisconnectFirebase} 
-                    className="btn-secondary" 
-                    style={{ color: 'var(--status-cancelled)', padding: '8px', fontSize: '12px' }}
-                  >
-                    Disconnect
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-
-          {/* D. Database Purge / Data Management */}
-          <div className="glass-card settings-section" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-            <h3 className="stat-title" style={{ color: 'var(--status-cancelled)' }}>
-              <Database size={16} /> Data Management
-            </h3>
-            <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
-              Purge all order logs stored locally on this browser. This does not delete data from Firebase if connected.
-            </p>
-
-            {!confirmClear ? (
+          {/* User Signin/Signout Action Card */}
+          <div style={{ borderTop: '1px dashed var(--border-light)', paddingTop: '10px', marginTop: '4px' }}>
+            {firebaseUser ? (
               <button 
                 type="button" 
+                onClick={handleLogout} 
                 className="btn-secondary" 
-                onClick={() => setConfirmClear(true)}
-                style={{ 
-                  color: 'var(--status-cancelled)', 
-                  background: 'rgba(239, 68, 68, 0.05)',
-                  borderColor: 'rgba(239, 68, 68, 0.2)',
-                  width: '100%',
-                  padding: '10px'
-                }}
+                style={{ width: '100%', padding: '10px', color: 'var(--status-cancelled)', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.03)', fontSize: '12px', fontWeight: 700 }}
               >
-                Clear Stored Orders ({orders.length})
+                Log Out from Cloud Account
               </button>
             ) : (
-              <div className="glass-card animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '12px', border: '1px solid var(--status-cancelled)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>
-                  <AlertTriangle size={15} style={{ color: 'var(--status-cancelled)' }} />
-                  Are you sure? This cannot be undone!
-                </span>
-                <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <form onSubmit={handleUserAuth} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <h4 style={{ fontSize: '11px', color: 'white', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {isRegistering ? 'Create Cloud Backup Account' : 'Sign in to sync with Cloud'}
+                  </h4>
+                  <input
+                    type="email"
+                    className="input-field"
+                    style={{ padding: '8px 10px', fontSize: '12px' }}
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="Email Address"
+                    required
+                  />
+                  <input
+                    type="password"
+                    className="input-field"
+                    style={{ padding: '8px 10px', fontSize: '12px' }}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Password"
+                    required
+                  />
+                  <button type="submit" className="btn-primary" style={{ padding: '9px', fontSize: '12px', fontWeight: 700 }}>
+                    {isRegistering ? 'Register & Link' : 'Login & Link'}
+                  </button>
+                </form>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
                   <button 
                     type="button" 
-                    onClick={handlePurge} 
-                    className="btn-primary" 
-                    style={{ background: 'var(--status-cancelled)', flexGrow: 1, padding: '8px 12px', fontSize: '12px' }}
+                    onClick={() => setIsRegistering(!isRegistering)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '11px', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
                   >
-                    Yes, Purge Data
+                    {isRegistering ? 'Have account? Sign In' : 'Need account? Create one'}
                   </button>
                   <button 
                     type="button" 
-                    onClick={() => setConfirmClear(false)} 
-                    className="btn-secondary"
-                    style={{ flexGrow: 1, padding: '8px 12px', fontSize: '12px' }}
+                    onClick={handleGoogleSignIn}
+                    style={{ background: 'transparent', border: 'none', color: 'hsl(var(--primary-glow))', fontSize: '11px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
                   >
-                    Cancel
+                    ⚡ Login with Google
                   </button>
                 </div>
               </div>
             )}
           </div>
         </div>
-      )}
+
+        {/* 2. Daily Sales Goal */}
+        <div className="glass-card settings-section">
+          <h3 className="stat-title" style={{ color: 'white' }}>
+            <Target size={16} /> Daily Sales Target
+          </h3>
+          <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
+            Set your daily goal to track achievement percentage on the dashboard.
+          </p>
+          <form onSubmit={handleSaveTarget} style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="number"
+              className="input-field"
+              value={newTarget}
+              onChange={(e) => setNewTarget(e.target.value)}
+              placeholder="e.g. 10"
+              style={{ flexGrow: 1, padding: '8px 12px' }}
+              min="1"
+              required
+            />
+            <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700 }}>
+              Update Goal
+            </button>
+          </form>
+        </div>
+
+        {/* 3. Product Catalog Management */}
+        <div className="glass-card settings-section">
+          <h3 className="stat-title" style={{ color: 'white' }}>
+            <ShoppingBag size={16} /> Product Price Catalog
+          </h3>
+          <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
+            Configure course products and prices to calculate total sales value during parsing.
+          </p>
+
+          <form onSubmit={handleAddProduct} style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Product Name"
+              value={newProdName}
+              onChange={(e) => setNewProdName(e.target.value)}
+              style={{ flex: 2, padding: '8px 10px', fontSize: '12px' }}
+              required
+            />
+            <input
+              type="number"
+              className="input-field"
+              placeholder="Price"
+              value={newProdPrice}
+              onChange={(e) => setNewProdPrice(e.target.value)}
+              style={{ flex: 1, padding: '8px 10px', fontSize: '12px' }}
+              required
+            />
+            <button type="submit" className="btn-primary" style={{ padding: '8px 12px' }} title="Add product">
+              <Plus size={16} />
+            </button>
+          </form>
+
+          {/* Product list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxTransit: '200px', overflowY: 'auto' }}>
+            {products.map((prod) => (
+              <div 
+                key={prod.id} 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  padding: '8px 10px', 
+                  background: 'rgba(255,255,255,0.02)', 
+                  border: '1px solid var(--border-light)', 
+                  borderRadius: '10px' 
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'white' }}>{prod.name}</span>
+                  <span style={{ fontSize: '10px', color: 'hsl(var(--primary-glow))', fontWeight: 700 }}>৳ {prod.price}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteProduct(prod.id)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-gray-dark)', cursor: 'pointer', padding: '4px' }}
+                  title="Delete product"
+                >
+                  <Trash2 size={14} className="hover-red" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 4. Themes & Customizations */}
+        <div className="glass-card settings-section">
+          <h3 className="stat-title" style={{ color: 'white', marginBottom: '12px' }}>
+            <Palette size={16} /> Appearance & Personalization
+          </h3>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-gray-light)' }}>Theme Color Color:</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[
+                { id: 'violet', color: '#8b5cf6', name: 'Violet' },
+                { id: 'emerald', color: '#10b981', name: 'Emerald' },
+                { id: 'cyan', color: '#06b6d4', name: 'Cyan' },
+                { id: 'sunset', color: '#f97316', name: 'Sunset' },
+              ].map((theme) => (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => handleThemeChange(theme.id)}
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: theme.color,
+                    border: activeTheme === theme.id ? '2px solid white' : '2px solid transparent',
+                    boxShadow: activeTheme === theme.id ? `0 0 10px ${theme.color}` : 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    padding: 0
+                  }}
+                  title={theme.name}
+                >
+                  {activeTheme === theme.id && <Check size={12} style={{ color: 'white' }} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sound toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px dashed var(--border-light)', paddingTop: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Volume2 size={16} style={{ color: 'var(--text-gray-light)' }} />
+              <div>
+                <div style={{ fontSize: '12px', color: 'white', fontWeight: 600 }}>Dopamine Audio Feedback</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-gray-dark)' }}>Play futuristic chime sound on order updates</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSoundToggle}
+              style={{
+                width: '36px',
+                height: '20px',
+                borderRadius: '10px',
+                backgroundColor: soundEnabled ? 'hsl(var(--primary-glow))' : 'rgba(255,255,255,0.1)',
+                border: 'none',
+                position: 'relative',
+                cursor: 'pointer',
+                transition: 'background-color 0.25s ease',
+                padding: 0
+              }}
+            >
+              <span
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  backgroundColor: 'white',
+                  position: 'absolute',
+                  top: '3px',
+                  left: soundEnabled ? '19px' : '3px',
+                  transition: 'left 0.25s ease'
+                }}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* 5. Database Backup & Restore */}
+        <div className="glass-card settings-section" style={{ border: '1px solid rgba(251, 191, 36, 0.2)', background: 'linear-gradient(135deg, rgba(251,191,36,0.04), rgba(11,15,25,0.8))' }}>
+          <h3 className="stat-title" style={{ color: 'white' }}>
+            <Database size={16} style={{ color: '#fbbf24' }} /> Database Backup & Restore
+          </h3>
+
+          <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
+            <p style={{ fontSize: '11px', color: '#fbbf24', margin: 0, lineHeight: 1.5, fontWeight: 600 }}>
+              Backup your data periodically. You can download the JSON backup file and restore it on any other phone or device.
+            </p>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Orders in Database</div>
+              <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', marginTop: '2px' }}>{orders.length} Logs</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '10px', color: 'var(--status-confirmed)', fontWeight: 700 }}>✅ {stats.success} Success</div>
+              <div style={{ fontSize: '10px', color: 'var(--status-pending)', fontWeight: 700, marginTop: '2px' }}>⏳ {stats.today} Today</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="btn-primary"
+              style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            >
+              <Download size={15} /> Download Full Backup File ({orders.length} orders)
+            </button>
+
+            <label
+              className="btn-secondary"
+              style={{ width: '100%', padding: '12px', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', margin: 0, boxSizing: 'border-box' }}
+            >
+              <Upload size={15} /> Restore database from backup file
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportBackup}
+                style={{ display: 'none' }}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* 6. Danger Zone (Purge Data) */}
+        <div className="glass-card settings-section" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+          <h3 className="stat-title" style={{ color: 'var(--status-cancelled)' }}>
+            <AlertTriangle size={16} /> Danger Zone
+          </h3>
+          <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
+            Purge all order logs stored locally on this device. This does not delete cloud-synchronized data.
+          </p>
+
+          {!confirmClear ? (
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              onClick={() => setConfirmClear(true)}
+              style={{ 
+                color: 'var(--status-cancelled)', 
+                background: 'rgba(239, 68, 68, 0.05)',
+                borderColor: 'rgba(239, 68, 68, 0.2)',
+                width: '100%',
+                padding: '10px',
+                fontSize: '12px',
+                fontWeight: 700
+              }}
+            >
+              Reset Local Orders ({orders.length})
+            </button>
+          ) : (
+            <div className="glass-card animate-fade-in" style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '12px', border: '1px solid var(--status-cancelled)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>
+                <AlertTriangle size={15} style={{ color: 'var(--status-cancelled)' }} />
+                This action is permanent! Proceed?
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  type="button" 
+                  onClick={handlePurge} 
+                  className="btn-primary" 
+                  style={{ background: 'var(--status-cancelled)', flexGrow: 1, padding: '8px 12px', fontSize: '12px', fontWeight: 700 }}
+                >
+                  Yes, Purge Local Orders
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setConfirmClear(false)} 
+                  className="btn-secondary"
+                  style={{ flexGrow: 1, padding: '8px 12px', fontSize: '12px' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 };

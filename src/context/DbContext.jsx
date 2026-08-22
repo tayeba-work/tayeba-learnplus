@@ -27,6 +27,18 @@ import seedOrders from './seed_orders.json';
 const DbContext = createContext();
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 
+const formatUsername = (email) => {
+  if (!email) return 'Tayeba Samma';
+  if (email.toLowerCase().includes('tayebasam')) {
+    return 'Tayeba Samma';
+  }
+  const part = email.split('@')[0];
+  return part
+    .split(/[._-]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 export const useDb = () => useContext(DbContext);
 
 export const DbProvider = ({ children }) => {
@@ -82,6 +94,11 @@ export const DbProvider = ({ children }) => {
   const [authReady, setAuthReady]         = useState(false); // true once auth state resolves
   const [isSyncing, setIsSyncing]         = useState(false);
   const [syncError, setSyncError]         = useState('');
+  
+  // Last logged in user's readable name to display on reload
+  const [lastUser, setLastUser] = useState(() => {
+    return localStorage.getItem('telesales_last_username') || 'Tayeba Samma';
+  });
 
   // Always-fresh ref to orders (avoids stale closures in async code)
   const ordersRef = useRef(orders);
@@ -150,8 +167,6 @@ export const DbProvider = ({ children }) => {
 
     const run = async () => {
       try {
-        // CRITICAL FIX: Use standard '[DEFAULT]' app because Firebase Auth redirects (getRedirectResult)
-        // are only supported on the default Firebase app instance.
         const defaultApp = getApps().find(a => a.name === '[DEFAULT]');
         if (defaultApp) await deleteApp(defaultApp);
 
@@ -170,7 +185,10 @@ export const DbProvider = ({ children }) => {
           const redirectResult = await getRedirectResult(auth);
           if (redirectResult?.user) {
             console.log('[Firebase] Redirect result resolved user:', redirectResult.user.email);
+            const name = formatUsername(redirectResult.user.email);
             setFirebaseUser({ uid: redirectResult.user.uid, email: redirectResult.user.email });
+            setLastUser(name);
+            localStorage.setItem('telesales_last_username', name);
             setIsFirebaseConnected(true);
           }
         } catch (redirectErr) {
@@ -185,7 +203,10 @@ export const DbProvider = ({ children }) => {
         unsubAuth = onAuthStateChanged(auth, async (user) => {
           if (user) {
             setIsFirebaseConnected(true);
+            const name = formatUsername(user.email);
             setFirebaseUser({ uid: user.uid, email: user.email });
+            setLastUser(name);
+            localStorage.setItem('telesales_last_username', name);
             setAuthReady(true);
             setSyncError('');
 
@@ -292,11 +313,9 @@ export const DbProvider = ({ children }) => {
   const loginWithGoogle   = async () => {
     const auth = getAuth(getDefaultApp());
     const provider = new GoogleAuthProvider();
-    // Force Google to show account selection dialog
     provider.setCustomParameters({ prompt: 'select_account' });
     
     try {
-      // Try popup first (more reliable on modern mobile Chrome/Safari and Incognito)
       await signInWithPopup(auth, provider);
     } catch (popupErr) {
       console.warn('[Firebase] Popup sign-in blocked or failed, falling back to redirect:', popupErr);
@@ -305,13 +324,13 @@ export const DbProvider = ({ children }) => {
         popupErr.code === 'auth/popup-closed-by-user' ||
         popupErr.code === 'auth/cancelled-popup-request'
       ) {
-        // Fallback for in-app browsers (like WhatsApp/Messenger) that don't support popups
         await signInWithRedirect(auth, provider);
       } else {
         throw popupErr;
       }
     }
   };
+  
   const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getDefaultApp()), email);
 
   // ─── 7. DB OPERATIONS ─────────────────────────────────────────────────────
@@ -380,7 +399,7 @@ export const DbProvider = ({ children }) => {
 
   return (
     <DbContext.Provider value={{
-      orders, products, dailyTarget, firebaseConfig,
+      orders, products, dailyTarget, firebaseConfig, lastUser,
       isFirebaseConnected, firebaseUser, authReady, isSyncing, syncError,
       loginWithEmail, registerWithEmail, loginWithGoogle, resetPassword, logout,
       addOrder, updateOrder, bulkUpdateOrders, deleteOrder,

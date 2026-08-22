@@ -15,7 +15,7 @@ function AppContent() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
-  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout, isSyncing, authReady } = useDb();
+  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout, isSyncing, authReady, lastUser } = useDb();
   const [bypassLogin, setBypassLogin] = useState(false);
 
   // Only show login portal AFTER Firebase auth state has resolved
@@ -116,7 +116,7 @@ function AppContent() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0b0f19', gap: '16px' }}>
         <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.1)', borderTop: '3px solid hsl(262 83% 58%)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <div style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', fontWeight: 600 }}>Connecting to Firebase…</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', fontWeight: 600 }}>Please wait, "{lastUser || 'User'}"…</div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
