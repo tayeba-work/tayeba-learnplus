@@ -79,6 +79,7 @@ export const DbProvider = ({ children }) => {
 
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
   const [firebaseUser, setFirebaseUser]   = useState(null);
+  const [authReady, setAuthReady]         = useState(false); // true once auth state resolves
   const [isSyncing, setIsSyncing]         = useState(false);
   const [syncError, setSyncError]         = useState('');
 
@@ -166,6 +167,7 @@ export const DbProvider = ({ children }) => {
           if (user) {
             setIsFirebaseConnected(true);
             setFirebaseUser({ uid: user.uid, email: user.email });
+            setAuthReady(true);
             setSyncError('');
 
             const colRef = collection(db, 'users', user.uid, 'orders');
@@ -230,12 +232,14 @@ export const DbProvider = ({ children }) => {
             setIsFirebaseConnected(false);
             setFirebaseUser(null);
             setIsSyncing(false);
+            setAuthReady(true);
             if (unsubSnapshot) { unsubSnapshot(); unsubSnapshot = null; }
           }
         }, (err) => {
           console.error('[Auth]', err);
           setSyncError('Auth error: ' + err.message);
           setIsSyncing(false);
+          setAuthReady(true);
         });
 
       } catch (err) {
@@ -243,6 +247,7 @@ export const DbProvider = ({ children }) => {
         setSyncError('Firebase init failed: ' + err.message);
         setIsFirebaseConnected(false);
         setIsSyncing(false);
+        setAuthReady(true);
       }
     };
 
@@ -335,7 +340,7 @@ export const DbProvider = ({ children }) => {
   return (
     <DbContext.Provider value={{
       orders, products, dailyTarget, firebaseConfig,
-      isFirebaseConnected, firebaseUser, isSyncing, syncError,
+      isFirebaseConnected, firebaseUser, authReady, isSyncing, syncError,
       loginWithEmail, registerWithEmail, loginWithGoogle, resetPassword, logout,
       addOrder, updateOrder, bulkUpdateOrders, deleteOrder,
       saveProducts, saveDailyTarget, saveFirebaseConfig, clearAllData, importOrders

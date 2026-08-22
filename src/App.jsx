@@ -15,11 +15,11 @@ function AppContent() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
-  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout, isSyncing } = useDb();
+  const { firebaseUser, isFirebaseConnected, firebaseConfig, logout, isSyncing, authReady } = useDb();
   const [bypassLogin, setBypassLogin] = useState(false);
 
-  // Show login portal when Firebase is configured but user not yet signed in
-  const showLoginPortal = firebaseConfig && !firebaseUser && !bypassLogin;
+  // Only show login portal AFTER Firebase auth state has resolved
+  const showLoginPortal = authReady && firebaseConfig && !firebaseUser && !bypassLogin;
 
   const dropdownRef = useRef(null);
 
@@ -103,6 +103,17 @@ function AppContent() {
       setActiveTab('orders');
     }
   };
+
+  // While Firebase is initializing, show a spinner (prevents black flash)
+  if (firebaseConfig && !authReady) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#0b0f19', gap: '16px' }}>
+        <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.1)', borderTop: '3px solid hsl(262 83% 58%)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ fontSize: '13px', color: 'var(--text-muted, #64748b)', fontWeight: 600 }}>Connecting to Firebase…</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   // Login Portal gate
   if (showLoginPortal) {
