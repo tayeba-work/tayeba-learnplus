@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-  const { orders, dailyTarget } = useDb();
+  const { orders, dailyTarget, monthlyTarget: configuredMonthlyTarget } = useDb();
 
   const [dateFilter, setDateFilter] = useState('all'); // today, yesterday, last7, thisMonth, all, custom
   const [statusFilter, setStatusFilter] = useState('all'); // all, pending, confirmed, shipped, delivered, cancelled, returned
@@ -106,10 +106,10 @@ const Dashboard = () => {
     const monthCancelled = monthOrders.filter(o => ['cancelled', 'returned'].includes(o.status)).length;
     const monthPending = monthOrders.filter(o => o.status === 'pending').length;
 
-    // Monthly target = dailyTarget × total days in month
-    const monthlyTarget = dailyTarget * daysInMonth;
-    // Projected target up to today = dailyTarget × dayOfMonth
-    const projectedTarget = dailyTarget * dayOfMonth;
+    // Monthly target = custom configured target or fallback (dailyTarget × total days)
+    const monthlyTarget = configuredMonthlyTarget || (dailyTarget * daysInMonth);
+    // Projected target up to today based on configured monthly target
+    const projectedTarget = Math.round((monthlyTarget / daysInMonth) * dayOfMonth);
     const achievementPct = monthlyTarget > 0 ? Math.min(Math.round((monthTotal / monthlyTarget) * 100), 150) : 0;
     const projectedPct = projectedTarget > 0 ? Math.min(Math.round((monthTotal / projectedTarget) * 100), 150) : 0;
 
@@ -124,7 +124,7 @@ const Dashboard = () => {
       const we = weekEnd.toISOString().split('T')[0];
       const wOrders = monthOrders.filter(o => o.date >= ws && o.date <= we);
       const wDays = Math.min(7, daysInMonth - w * 7);
-      const wTarget = dailyTarget * wDays;
+      const wTarget = Math.round((monthlyTarget / daysInMonth) * wDays);
       const isPast = weekEnd < now;
       weeks.push({
         label: `Week ${w + 1}`,
@@ -138,7 +138,7 @@ const Dashboard = () => {
 
     const monthName = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     return { monthTotal, monthSuccessful, monthCancelled, monthPending, monthlyTarget, projectedTarget, achievementPct, projectedPct, daysInMonth, dayOfMonth, weeks, monthName };
-  }, [orders, dailyTarget]);
+  }, [orders, dailyTarget, configuredMonthlyTarget]);
 
   // Hourly shift distribution
   const shiftData = useMemo(() => {

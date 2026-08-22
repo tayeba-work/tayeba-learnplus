@@ -34,8 +34,10 @@ const Settings = () => {
     userProfile,
     saveProducts,
     saveDailyTarget,
+    saveMonthlyTarget,
     clearAllData,
-    orders
+    orders,
+    monthlyTarget
   } = useDb();
 
   // Profile configuration states
@@ -45,6 +47,7 @@ const Settings = () => {
 
   // General states
   const [newTarget, setNewTarget] = useState(dailyTarget);
+  const [newMonthlyTarget, setNewMonthlyTarget] = useState(monthlyTarget);
   const [newProdName, setNewProdName] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   
@@ -169,7 +172,8 @@ const Settings = () => {
   const handleSaveTarget = (e) => {
     e.preventDefault();
     saveDailyTarget(parseInt(newTarget, 10) || 10);
-    triggerNotification('🎯 Daily sales goal updated.');
+    saveMonthlyTarget(parseInt(newMonthlyTarget, 10) || 300);
+    triggerNotification('🎯 Sales goals updated.');
   };
 
   const handleAddProduct = (e) => {
@@ -503,27 +507,45 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* 2. Daily Sales Goal */}
+        {/* 2. Sales Goal Settings (Daily & Monthly) */}
         <div className="glass-card settings-section">
           <h3 className="stat-title" style={{ color: 'white' }}>
-            <Target size={16} /> My Sales Goal
+            <Target size={16} /> My Sales Goals
           </h3>
           <p style={{ fontSize: '11px', color: 'var(--text-gray-dark)', marginBottom: '10px' }}>
-            Configure your daily sales target to track progress gauges on the dashboard.
+            Configure your daily and monthly sales targets to track progress on the dashboard.
           </p>
-          <form onSubmit={handleSaveTarget} style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="number"
-              className="input-field"
-              value={newTarget}
-              onChange={(e) => setNewTarget(e.target.value)}
-              placeholder="e.g. 10"
-              style={{ flexGrow: 1, padding: '8px 12px' }}
-              min="1"
-              required
-            />
-            <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 700 }}>
-              Update Goal
+          <form onSubmit={handleSaveTarget} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <div className="field-group" style={{ flex: 1 }}>
+                <span className="field-label" style={{ fontSize: '9px' }}>Daily Target (Orders)</span>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={newTarget}
+                  onChange={(e) => setNewTarget(e.target.value)}
+                  placeholder="e.g. 10"
+                  style={{ padding: '8px 10px', fontSize: '12px' }}
+                  min="1"
+                  required
+                />
+              </div>
+              <div className="field-group" style={{ flex: 1 }}>
+                <span className="field-label" style={{ fontSize: '9px' }}>Monthly Target (Orders)</span>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={newMonthlyTarget}
+                  onChange={(e) => setNewMonthlyTarget(e.target.value)}
+                  placeholder="e.g. 300"
+                  style={{ padding: '8px 10px', fontSize: '12px' }}
+                  min="1"
+                  required
+                />
+              </div>
+            </div>
+            <button type="submit" className="btn-primary" style={{ padding: '10px', fontSize: '12px', fontWeight: 700 }}>
+              Update Sales Goals
             </button>
           </form>
         </div>

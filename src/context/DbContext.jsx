@@ -66,6 +66,12 @@ export const DbProvider = ({ children }) => {
     return s ? parseInt(s, 10) : 10;
   });
 
+  const [monthlyTarget, setMonthlyTarget] = useState(() => {
+    const s = localStorage.getItem('telesales_monthly_target');
+    return s ? parseInt(s, 10) : 300;
+  });
+
+
   // User Profile details (Name, Phone, base64 Avatar)
   const [userProfile, setUserProfile] = useState(() => {
     try {
@@ -124,6 +130,11 @@ export const DbProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem('telesales_daily_target', dailyTarget.toString());
   }, [dailyTarget]);
+
+  useEffect(() => {
+    localStorage.setItem('telesales_monthly_target', monthlyTarget.toString());
+  }, [monthlyTarget]);
+
 
   useEffect(() => {
     try { localStorage.setItem('telesales_profile', JSON.stringify(userProfile)); } catch {}
@@ -438,17 +449,18 @@ export const DbProvider = ({ children }) => {
 
   const saveProducts      = (p)   => setProducts(p);
   const saveDailyTarget   = (t)   => setDailyTarget(t);
+  const saveMonthlyTarget = (t)   => setMonthlyTarget(t);
   const saveFirebaseConfig = (c)  => { setFirebaseConfig(c); if (!c) { setIsFirebaseConnected(false); setFirebaseUser(null); } };
   const clearAllData      = ()    => { setOrders([]); localStorage.removeItem('telesales_orders'); };
   const importOrders      = (arr) => setOrders(arr);
 
   return (
     <DbContext.Provider value={{
-      orders, products, dailyTarget, firebaseConfig, lastUser, userProfile,
+      orders, products, dailyTarget, monthlyTarget, firebaseConfig, lastUser, userProfile,
       isFirebaseConnected, firebaseUser, authReady, isSyncing, syncError,
       loginWithEmail, registerWithEmail, loginWithGoogle, resetPassword, logout, updateUserProfile,
       addOrder, updateOrder, bulkUpdateOrders, deleteOrder,
-      saveProducts, saveDailyTarget, saveFirebaseConfig, clearAllData, importOrders
+      saveProducts, saveDailyTarget, saveMonthlyTarget, saveFirebaseConfig, clearAllData, importOrders
     }}>
       {children}
     </DbContext.Provider>
