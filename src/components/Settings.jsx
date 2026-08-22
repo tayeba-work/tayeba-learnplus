@@ -119,23 +119,52 @@ const Settings = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 800 * 1024) { // 800KB max to fit nicely in state
-      triggerNotification('⚠️ Image is too large. Please use a smaller picture (under 800KB).');
-      return;
-    }
+    triggerNotification('⚙️ Resizing and optimizing photo…');
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const base64String = event.target.result;
-        await updateUserProfile({ avatar: base64String });
-        triggerNotification('📸 Profile picture updated!');
-      } catch (err) {
-        triggerNotification('❌ Photo upload failed: ' + err.message);
-      }
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 250; // Perfect size for circular profile avatar
+          let width = img.width;
+          let height = img.height;
+
+          // Scale maintaining aspect ratio
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Compress to JPEG with 85% quality (reduces 5MB phone photos to ~20KB instantly!)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+          await updateUserProfile({ avatar: compressedBase64 });
+          triggerNotification('📸 Profile picture updated and optimized!');
+        } catch (err) {
+          console.error('[AvatarOptimizationError]', err);
+          triggerNotification('❌ Photo processing failed: ' + err.message);
+        }
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
+
 
   const handleSaveTarget = (e) => {
     e.preventDefault();
