@@ -292,15 +292,26 @@ export const DbProvider = ({ children }) => {
   const loginWithGoogle   = async () => {
     const auth = getAuth(getDefaultApp());
     const provider = new GoogleAuthProvider();
-    // Use redirect on mobile (PWA/phone), popup on desktop
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      await signInWithRedirect(auth, provider);
-    } else {
+    // Force Google to show account selection dialog
+    provider.setCustomParameters({ prompt: 'select_account' });
+    
+    try {
+      // Try popup first (more reliable on modern mobile Chrome/Safari and Incognito)
       await signInWithPopup(auth, provider);
+    } catch (popupErr) {
+      console.warn('[Firebase] Popup sign-in blocked or failed, falling back to redirect:', popupErr);
+      if (
+        popupErr.code === 'auth/popup-blocked' || 
+        popupErr.code === 'auth/popup-closed-by-user' ||
+        popupErr.code === 'auth/cancelled-popup-request'
+      ) {
+        // Fallback for in-app browsers (like WhatsApp/Messenger) that don't support popups
+        await signInWithRedirect(auth, provider);
+      } else {
+        throw popupErr;
+      }
     }
   };
-  
   const resetPassword     = (email)     => sendPasswordResetEmail(getAuth(getDefaultApp()), email);
 
   // ─── 7. DB OPERATIONS ─────────────────────────────────────────────────────
